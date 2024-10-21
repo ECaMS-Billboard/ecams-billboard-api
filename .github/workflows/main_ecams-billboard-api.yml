@@ -1,7 +1,7 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy Node.js app to Azure Web App - ecams-billboard-API
+name: Build and deploy Node.js app to Azure Web App - ecams-billboard-api
 
 on:
   push:
@@ -51,15 +51,15 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_D10C2D445D614EBBAEF008FA08D15A4B }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_0331710AD1BA4A58A00B6EA11DB365D6 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_B707951C3F4E454EA696B2896DAA1AE7 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_0F145173B2E44A0AB9F280B41846AB51 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_97E31ADF9EA840D3B941C3696A2FB184 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_3FDDBA88E8BC4320A42478945588FFB4 }}
 
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'ecams-billboard-API'
+          app-name: 'ecams-billboard-api'
           slot-name: 'Production'
           package: .
           
