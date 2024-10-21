@@ -1,13 +1,13 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose'); // MongoDB
+const mongoose = require('mongoose');
 const multer = require('multer'); // For GridFS
 const { Readable } = require('stream');
 const path = require('path');
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // Open up CORS
 app.use(cors({ origin: '*' }));
@@ -74,7 +74,7 @@ app.post('/add-prof', async (req, res) => {
     const newProfessor = new User({
       First: 'Example',
       Last: 'Name',
-      Email: 'example.name@example.com',
+      Email: 'name@lewisu.edu',
     });
 
     await newProfessor.save();
@@ -92,8 +92,8 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     }
   
     try {
-      // Marks these as optional fields from the request
-      const { description = '', notes = '' } = req.body;
+      // Marks optional fields
+      const { description='', notes='' } = req.body;
   
       const readableStream = new Readable();
       readableStream.push(req.file.buffer);
@@ -114,22 +114,22 @@ app.post('/upload', upload.single('file'), async (req, res) => {
           return res.status(500).json({ error: 'File upload failed' });
         }
   
-        // Insert metadata including optional Description and Notes
+        // Insert metadata 
         await db.collection('Slides').insertOne({
           filename: file.filename,
           contentType: file.contentType,
           length: file.length,
           uploadDate: file.uploadDate,
           fileId: file._id,
-          Description: description, // Optional description
-          Notes: notes, // Optional other notes
-          Approved: 'No', // All slides are NOT approved by default
+          description: description,
+          notes: notes,
+          approved: false, // All slides are NOT approved by default
         });
   
         res.status(201).json({ 
           file, 
           message: 'Image uploaded successfully',
-          metadata: { description, notes, approved: 'No' }
+          metadata: { description, approved: false }
         });
       });
   
@@ -173,7 +173,7 @@ app.get('/list-images', async (req, res) => {
       res.json(files);
     } catch (err) {
       console.error('Failed to list images:', err);
-      res.status(500).json({ error: 'Failed to list images', details: err });
+      res.status(500).json({ error: 'Fai"Approved by RH"led to list images', details: err });
     }
   });  
 
