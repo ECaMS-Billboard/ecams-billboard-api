@@ -7,7 +7,7 @@ const { Readable } = require('stream');
 const path = require('path');
 
 const app = express();
-const PORT = 3000;
+const PORT = 5000;
 
 // Open up CORS
 app.use(cors({ origin: '*' }));
