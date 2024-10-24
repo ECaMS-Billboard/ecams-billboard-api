@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 5000;
 if (!process.env.WEBSITE_HOSTNAME) {
   require('dotenv').config();
 } else {
-  MONGO_URI = process.env.MONGODB_URI;
+  MONGO_URI = process.env.MONGO_URI;
 }
 
 // Open up CORS
