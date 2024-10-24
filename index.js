@@ -8,10 +8,12 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+console.log("App is starting...");
 console.log("MONGO_URI:", process.env.MONGO_URI);
 // Only load .env for testing locally
 if (!process.env.WEBSITE_HOSTNAME) {
   require('dotenv').config();
+  MONGO_URI = process.env.MONGO_URI;
 } else {
   MONGO_URI = process.env.MONGO_URI;
 }
