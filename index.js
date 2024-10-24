@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -9,12 +8,19 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Only load .env for testing locally
+if (!process.env.WEBSITE_HOSTNAME) {
+  require('dotenv').config();
+} else {
+  MONGO_URI = process.env.MONGODB_URI;
+}
+
 // Open up CORS
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI, {
+mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 });
