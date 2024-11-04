@@ -5,18 +5,19 @@ const multer = require('multer'); // For GridFS
 const { Readable } = require('stream');
 const path = require('path');
 
+// Load environment variables from a .env file if available
+require('dotenv').config();
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 console.log("App is starting...");
 
-// MongoURI
-//require('dotenv').config();
-//MONGO_URI = process.env.MONGO_URI;
-MONGO_URI="mongodb+srv://ecamsbb:0JqIEtTsol8lXab1@ecamsdb.kk917.mongodb.net/?retryWrites=true&w=majority&appName=EcamsBB";
+// MongoURI - Ensure to use an environment variable for better security in production
+const MONGO_URI = "mongodb+srv://ecamsbb:0JqIEtTsol8lXab1@ecamsdb.kk917.mongodb.net/?retryWrites=true&w=majority&appName=EcamsBB";
 console.log("MONGO_URI:", MONGO_URI);
 
-// Open up CORS
+// Enable CORS - Adjust 'origin' as needed for your deployment (for security)
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
@@ -26,7 +27,6 @@ mongoose.connect(MONGO_URI, {
   useUnifiedTopology: true,
 });
 
-// Specify the EcamsBB Database
 const db = mongoose.connection.useDb('EcamsBB');
 
 // Initialize GridFS
@@ -53,7 +53,7 @@ const User = db.model(
   'Professors'
 );
 
-// Serve index.html as the static
+// Serve index.html as the static file
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -94,61 +94,56 @@ app.post('/add-prof', async (req, res) => {
 
 // Route to upload an image to MongoDB using GridFS
 app.post('/upload', upload.single('file'), async (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-  
-    try {
-      // Marks optional fields
-      const { description='', notes='' } = req.body;
-  
-      const readableStream = new Readable();
-      readableStream.push(req.file.buffer);
-      readableStream.push(null);
-  
-      const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
-        contentType: req.file.mimetype,
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  try {
+    const { description = '', notes = '' } = req.body;
+    const readableStream = new Readable();
+    readableStream.push(req.file.buffer);
+    readableStream.push(null);
+
+    const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
+      contentType: req.file.mimetype,
+    });
+
+    readableStream.pipe(uploadStream);
+
+    uploadStream.on('finish', async () => {
+      const file = await db.collection('slides.files').findOne({ filename: req.file.originalname });
+
+      if (!file) {
+        return res.status(500).json({ error: 'File upload failed' });
+      }
+
+      await db.collection('Slides').insertOne({
+        filename: file.filename,
+        contentType: file.contentType,
+        length: file.length,
+        uploadDate: file.uploadDate,
+        fileId: file._id,
+        description: description,
+        notes: notes,
+        approved: false, // All slides are NOT approved by default
       });
-  
-      readableStream.pipe(uploadStream);
-  
-      uploadStream.on('finish', async () => {
-        const file = await db.collection('slides.files').findOne({
-          filename: req.file.originalname,
-        });
-  
-        if (!file) {
-          return res.status(500).json({ error: 'File upload failed' });
-        }
-  
-        // Insert metadata 
-        await db.collection('Slides').insertOne({
-          filename: file.filename,
-          contentType: file.contentType,
-          length: file.length,
-          uploadDate: file.uploadDate,
-          fileId: file._id,
-          description: description,
-          notes: notes,
-          approved: false, // All slides are NOT approved by default
-        });
-  
-        res.status(201).json({ 
-          file, 
-          message: 'Image uploaded successfully',
-          metadata: { description, approved: false }
-        });
+
+      res.status(201).json({
+        file,
+        message: 'Image uploaded successfully',
+        metadata: { description, approved: false }
       });
-  
-      uploadStream.on('error', (err) => {
-        console.error('Upload failed:', err);
-        res.status(500).json({ error: 'Failed to upload image', details: err });
-      });
-    } catch (err) {
-      console.error('Unexpected error during upload:', err);
-      res.status(500).json({ error: 'Unexpected error occurred', details: err });
-    }
-  });  
+    });
+
+    uploadStream.on('error', (err) => {
+      console.error('Upload failed:', err);
+      res.status(500).json({ error: 'Failed to upload image', details: err });
+    });
+  } catch (err) {
+    console.error('Unexpected error during upload:', err);
+    res.status(500).json({ error: 'Unexpected error occurred', details: err });
+  }
+});
 
 // Route to fetch an image by filename
 app.get('/image/:filename', async (req, res) => {
@@ -172,19 +167,19 @@ app.get('/image/:filename', async (req, res) => {
 
 // Route to return all images (as JSON)
 app.get('/list-images', async (req, res) => {
-    try {
-      const files = await db.collection('slides.files').find().toArray();
-      if (!files || files.length === 0) {
-        return res.status(404).json({ message: 'No images found.' });
-      }
-      res.json(files);
-    } catch (err) {
-      console.error('Failed to list images:', err);
-      res.status(500).json({ error: 'Fai"Approved by RH"led to list images', details: err });
+  try {
+    const files = await db.collection('slides.files').find().toArray();
+    if (!files || files.length === 0) {
+      return res.status(404).json({ message: 'No images found.' });
     }
-  });  
+    res.json(files);
+  } catch (err) {
+    console.error('Failed to list images:', err);
+    res.status(500).json({ error: 'Failed to list images', details: err });
+  }
+});
 
 // Start the server
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server running at ${process.env.BASE_URL || `http://localhost:${PORT}`}`);
 });
