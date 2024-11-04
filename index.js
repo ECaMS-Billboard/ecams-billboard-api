@@ -14,8 +14,8 @@ app.use(cors()); // Allow CORS
 app.use(express.static(path.join(__dirname, 'static')));
 
 // MongoURI - Ensure to use an environment variable for better security in production
-const MONGO_URI = "mongodb+srv://ecamsbb:0JqIEtTsol8lXab1@ecamsdb.kk917.mongodb.net/?retryWrites=true&w=majority&appName=EcamsBB";
-console.log("MONGO_URI:", MONGO_URI);
+require('dotenv').config();
+const MONGO_URI = process.env.MONGO_URI;
 
 // Connect to MongoDB
 mongoose.connect(MONGO_URI, {
