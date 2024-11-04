@@ -10,7 +10,7 @@ const port = process.env.PORT || 3000; // Set the port
 app.use(cors());
 
 // Use static files from the 'static' folder
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'static')));
 
 
 // Define the /prof-list route to return a simple JSON response
