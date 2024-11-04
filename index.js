@@ -18,7 +18,7 @@ const MONGO_URI = "mongodb+srv://ecamsbb:0JqIEtTsol8lXab1@ecamsdb.kk917.mongodb.
 console.log("MONGO_URI:", MONGO_URI);
 
 // Enable CORS - Adjust 'origin' as needed for your deployment (for security)
-app.use(cors({ origin: '*' }));
+app.use(cors());
 app.use(express.json());
 
 // Connect to MongoDB
