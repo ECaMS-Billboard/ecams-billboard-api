@@ -11,8 +11,9 @@ const PORT = process.env.PORT || 5000;
 console.log("App is starting...");
 
 // MongoURI
-require('dotenv').config();
-MONGO_URI = process.env.MONGO_URI;
+//require('dotenv').config();
+//MONGO_URI = process.env.MONGO_URI;
+MONGO_URI="mongodb+srv://ecamsbb:0JqIEtTsol8lXab1@ecamsdb.kk917.mongodb.net/?retryWrites=true&w=majority&appName=EcamsBB";
 console.log("MONGO_URI:", MONGO_URI);
 
 // Open up CORS
