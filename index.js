@@ -65,8 +65,8 @@ app.get('/prof-list', async (req, res) => {
     console.log('Professors:', users);
 
     if (users.length === 0) {
-      return res.status(404).json({ message: 'No professors found.' });
-    }
+      return res.status(200).json({ message: 'No professors found.', users: [] });
+    }    
 
     res.json(users);
   } catch (err) {
