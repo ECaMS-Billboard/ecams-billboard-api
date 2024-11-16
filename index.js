@@ -13,6 +13,9 @@ app.use(cors()); // Allow CORS
 // Use files from the static folder
 app.use(express.static(path.join(__dirname, 'static')));
 
+// Include JSON middleware (for /login)
+app.use(express.json());
+
 // MongoURI - Ensure to use an environment variable for better security in production
 require('dotenv').config();
 const MONGO_URI = process.env.MONGO_URI;
@@ -118,7 +121,37 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       res.status(500).json({ error: 'Unexpected error occurred', details: err });
     }
   });
-  
+
+
+/* TODO: both this and AdminPanel.js on the main repo are both to be considered
+   just proof of concept. This (kind of, barely) works as an authentication
+   system but it is very very bad, and needs to be reworked ASAP */
+const ACP_PASSWORD = process.env.ACP_PASSWORD;
+
+app.post('/login', (req, res) => {
+  const { password } = req.body;
+
+  if (!password) {
+    return res.status(400).json({
+      success: false,
+      message: "Password is required"
+    });
+  }
+
+  if (password !== ACP_PASSWORD) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid password"
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: "Login successful"
+  });
+});
+
+
   // Route to fetch an image by filename
   app.get('/image/:filename', async (req, res) => {
     try {
