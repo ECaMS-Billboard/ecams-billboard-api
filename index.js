@@ -32,9 +32,11 @@ mongoose.connect(MONGO_URI, {
   const User = db.model(
     'User',
     new mongoose.Schema({
-      First: String,
-      Last: String,
-      Email: String,
+      fname: String,
+      lname: String,
+      dept: String,
+      num_ratings: Number,
+      overall_rating: String,
     }),
     'Professors'
   );
@@ -55,6 +57,26 @@ app.get('/prof-list', async (req, res) => {
       res.status(500).json({ error: 'Failed to fetch professors' });
     }
   });
+
+// Route to get data about specific professor
+app.get('/prof-info/:id', async (req, res) => {
+    try {
+        console.log("Fetching professor with ID:", req.params.id);
+        const professor = await User.findOne({ _id: new mongoose.Types.ObjectId(req.params.id) });
+
+        if (!professor) {
+            console.log("No professor found for ID:", req.params.id);
+            return res.status(404).json({ error: "Professor not found" });
+        }
+
+        console.log("Professor found:", professor);
+        res.json(professor);
+    } catch (error) {
+        console.error("Error:", error.message);
+        res.status(500).json({ error: "An error occurred while fetching the data" });
+    }
+});
+
 
 // Initialize GridFS
 let gfsBucket;
