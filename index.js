@@ -41,21 +41,19 @@ mongoose.connect(MONGO_URI, {
     'Professors'
   );
 
-app.use(express.static(path.join(__dirname, 'public')));
-
 // Home page route
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'static', 'index.html'));
 });
 
 // Professors page route
 app.get('/professors', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'professors.html'));
+  res.sendFile(path.join(__dirname, 'static', 'professors.html'));
 });
 
 // Slides page route
 app.get('/slides', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'slides.html'));
+  res.sendFile(path.join(__dirname, 'static', 'slides.html'));
 });
 
 
