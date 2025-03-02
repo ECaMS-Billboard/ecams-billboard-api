@@ -41,6 +41,22 @@ mongoose.connect(MONGO_URI, {
     'Professors'
   );
 
+// Home page route
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Professors page route
+app.get('/professors', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'professors.html'));
+});
+
+// Slides page route
+app.get('/slides', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'slides.html'));
+});
+
+
 // Route to return the list of all professors
 app.get('/prof-list', async (req, res) => {
     try {

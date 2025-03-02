@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slides List</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            text-align: center;
+            padding: 50px;
+        }
+        h1 {
+            color: #343a40;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            background-color: #e9ecef;
+            margin: 5px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Slides</h1>
+        <div id="slides-data"></div>
+    </div>
+    <script>
+        fetch('/api/slides')
+            .then(response => response.json())
+            .then(data => {
+                const slidesDiv = document.getElementById('slides-data');
+                let html = '<ul>';
+                data.forEach(slide => {
+                    html += `<li>${slide.title} - ${slide.description}</li>`;
+                });
+                html += '</ul>';
+                slidesDiv.innerHTML = html;
+            });
+    </script>
+</body>
+</html>
