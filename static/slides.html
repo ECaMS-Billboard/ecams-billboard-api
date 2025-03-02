@@ -5,29 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Slides List</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f8f9fa;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            text-align: center;
-            padding: 50px;
-        }
-        h1 {
-            color: #343a40;
-        }
-        ul {
-            list-style-type: none;
-            padding: 0;
-        }
-        li {
-            background-color: #e9ecef;
-            margin: 5px 0;
-            padding: 10px;
-            border-radius: 5px;
-        }
+        body { font-family: Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
+        .container { text-align: center; padding: 50px; }
+        h1 { color: #343a40; }
+        ul { list-style-type: none; padding: 0; }
+        li { background-color: #e9ecef; margin: 5px 0; padding: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
@@ -36,16 +18,20 @@
         <div id="slides-data"></div>
     </div>
     <script>
-        fetch('/api/slides')
+        fetch('/list-images')
             .then(response => response.json())
             .then(data => {
                 const slidesDiv = document.getElementById('slides-data');
                 let html = '<ul>';
                 data.forEach(slide => {
-                    html += `<li>${slide.title} - ${slide.description}</li>`;
+                    html += `<li>${slide.filename} - ${slide.contentType}</li>`;
                 });
                 html += '</ul>';
                 slidesDiv.innerHTML = html;
+            })
+            .catch(err => {
+                console.error('Failed to fetch slides:', err);
+                document.getElementById('slides-data').innerHTML = 'Failed to fetch slides. Please try again later.';
             });
     </script>
 </body>

@@ -5,29 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Professors List</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f8f9fa;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            text-align: center;
-            padding: 50px;
-        }
-        h1 {
-            color: #343a40;
-        }
-        ul {
-            list-style-type: none;
-            padding: 0;
-        }
-        li {
-            background-color: #e9ecef;
-            margin: 5px 0;
-            padding: 10px;
-            border-radius: 5px;
-        }
+        body { font-family: Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
+        .container { text-align: center; padding: 50px; }
+        h1 { color: #343a40; }
+        ul { list-style-type: none; padding: 0; }
+        li { background-color: #e9ecef; margin: 5px 0; padding: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
@@ -36,16 +18,20 @@
         <div id="professor-data"></div>
     </div>
     <script>
-        fetch('/api/professors')
+        fetch('/prof-list')
             .then(response => response.json())
             .then(data => {
                 const professorDiv = document.getElementById('professor-data');
                 let html = '<ul>';
                 data.forEach(professor => {
-                    html += `<li>${professor.name} - ${professor.department}</li>`;
+                    html += `<li>${professor.fname} ${professor.lname} - ${professor.dept}</li>`;
                 });
                 html += '</ul>';
                 professorDiv.innerHTML = html;
+            })
+            .catch(err => {
+                console.error('Failed to fetch professors:', err);
+                document.getElementById('professor-data').innerHTML = 'Failed to fetch professors. Please try again later.';
             });
     </script>
 </body>
