@@ -41,6 +41,8 @@ mongoose.connect(MONGO_URI, {
     'Professors'
   );
 
+app.use(express.static(path.join(__dirname, 'public')));
+
 // Home page route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
