@@ -8,9 +8,9 @@
         body { font-family: Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
         .container { text-align: center; padding: 50px; }
         h1 { color: #343a40; }
-        ul { list-style-type: none; padding: 0; }
-        li { background-color: #e9ecef; margin: 5px 0; padding: 10px; border-radius: 5px; padding: 10px; }
-        img { max-width: 200px; height: auto; }
+        ul { list-style-type: none; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; }
+        li { background-color: #e9ecef; margin: 10px; padding: 10px; border-radius: 5px; width: 200px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+        img { max-width: 300px; height: auto; }
     </style>
 </head>
 <body>
@@ -27,7 +27,7 @@
                 data.forEach(slide => {
                     html += `<li>
                                 <img src="/image/${slide.filename}" alt="${slide.filename}">
-                                <p>${slide.filename}</p>
+                                <p>${slide.filename} - ${slide.contentType}</p>
                              </li>`;
                 });
                 html += '</ul>';
