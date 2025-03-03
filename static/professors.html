@@ -8,9 +8,8 @@
         body { font-family: Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
         .container { text-align: center; padding: 50px; }
         h1 { color: #343a40; }
-        ul { list-style-type: none; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; }
-        li { background-color: #e9ecef; margin: 10px; padding: 10px; border-radius: 5px; width: 200px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
-        p { margin: 0; }
+        ul { list-style-type: none; padding: 0; }
+        li { background-color: #e9ecef; margin: 5px 0; padding: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
@@ -25,10 +24,7 @@
                 const professorDiv = document.getElementById('professor-data');
                 let html = '<ul>';
                 data.forEach(professor => {
-                    html += `<li>
-                                <p>${professor.fname} ${professor.lname} - ${professor.email}</p>
-                                <p>${professor.dept} - ${professor.office}</p>
-                             </li>`;
+                    html += `<li>${professor.fname} ${professor.lname} - ${professor.email} - ${professor.dept} - ${professor.office}</li>`;
                 });
                 html += '</ul>';
                 professorDiv.innerHTML = html;
