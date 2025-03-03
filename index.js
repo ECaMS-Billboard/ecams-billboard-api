@@ -238,41 +238,6 @@ app.delete('/delete-slide/:id', async (req, res) => {
   }
 });
 
-// Route to approve or disapprove a slide
-app.put('/approve-slide/:id', async (req, res) => {
-  try {
-      const { id } = req.params;
-      const { approved } = req.body;
-      const slide = await db.collection('Slides').findOneAndUpdate(
-          { fileId: new mongoose.Types.ObjectId(id) },
-          { $set: { approved: approved } },
-          { returnOriginal: false }
-      );
-      if (!slide.value) {
-          return res.status(404).json({ error: 'Slide not found' });
-      }
-      res.json({ message: 'Slide updated successfully' });
-  } catch (err) {
-      console.error('Failed to update slide:', err);
-      res.status(500).json({ error: 'Failed to update slide', details: err });
-  }
-});
-
-// Route to return only approved slides, USE THIS ONE TO DISPLAY IMAGES, NOT THE OTHER
-app.get('/list-approved-images', async (req, res) => {
-  try {
-      const slides = await db.collection('Slides').find({ approved: true }).toArray();
-      if (!slides || slides.length === 0) {
-          return res.status(404).json({ message: 'No approved slides found.' });
-      }
-      res.json(slides);
-  } catch (err) {
-      console.error('Failed to list approved slides:', err);
-      res.status(500).json({ error: 'Failed to list approved slides', details: err });
-  }
-});
-
-
 /* TODO: both this and AdminPanel.js on the main repo are both to be considered
    just proof of concept. This (kind of, barely) works as an authentication
    system but it is very very bad, and needs to be reworked ASAP */
