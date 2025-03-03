@@ -32,14 +32,16 @@ mongoose.connect(MONGO_URI, {
   const User = db.model(
     'User',
     new mongoose.Schema({
-      fname: String,
-      lname: String,
-      dept: String,
-      num_ratings: Number,
-      overall_rating: String,
+        fname: String,
+        lname: String,
+        email: String,
+        dept: String,
+        office: String,
+        num_ratings: { type: Number, default: 0 },
+        overall_rating: { type: String, default: '0' },
     }),
     'Professors'
-  );
+);
 
 // Home page route
 app.get('/', (req, res) => {
@@ -66,8 +68,6 @@ app.post('/add-professor', async (req, res) => {
           email,
           dept,
           office,
-          num_ratings: 0,       // Default value
-          overall_rating: '0'  // Default value
       });
       await newProfessor.save();
       res.status(201).json({ message: 'Professor added successfully' });
