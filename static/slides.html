@@ -9,7 +9,8 @@
         .container { text-align: center; padding: 50px; }
         h1 { color: #343a40; }
         ul { list-style-type: none; padding: 0; }
-        li { background-color: #e9ecef; margin: 5px 0; padding: 10px; border-radius: 5px; }
+        li { background-color: #e9ecef; margin: 5px 0; padding: 10px; border-radius: 5px; padding: 10px; }
+        img { max-width: 100%; height: auto; }
     </style>
 </head>
 <body>
@@ -24,7 +25,10 @@
                 const slidesDiv = document.getElementById('slides-data');
                 let html = '<ul>';
                 data.forEach(slide => {
-                    html += `<li>${slide.filename} - ${slide.contentType}</li>`;
+                    html += `<li>
+                                <img src="/image/${slide.filename}" alt="${slide.filename}">
+                                <p>${slide.filename}</p>
+                             </li>`;
                 });
                 html += '</ul>';
                 slidesDiv.innerHTML = html;

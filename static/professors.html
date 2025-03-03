@@ -24,7 +24,7 @@
                 const professorDiv = document.getElementById('professor-data');
                 let html = '<ul>';
                 data.forEach(professor => {
-                    html += `<li>${professor.fname} ${professor.lname} - ${professor.dept}</li>`;
+                    html += `<li>${professor.fname} ${professor.lname} - ${professor.email} - ${professor.dept} - ${professor.office}</li>`;
                 });
                 html += '</ul>';
                 professorDiv.innerHTML = html;
