@@ -10,29 +10,111 @@
         h1 { color: #343a40; }
         ul { list-style-type: none; padding: 0; }
         li { background-color: #e9ecef; margin: 5px 0; padding: 10px; border-radius: 5px; }
+        button { margin: 5px; }
+        form { margin-bottom: 20px; }
+        input { margin: 5px; padding: 5px; border-radius: 5px; border: 1px solid #ced4da; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Professors</h1>
+        <form id="add-professor-form">
+            <input type="text" id="fname" placeholder="First Name" required>
+            <input type="text" id="lname" placeholder="Last Name" required>
+            <input type="email" id="email" placeholder="Email" required>
+            <input type="text" id="dept" placeholder="Department" required>
+            <input type="text" id="office" placeholder="Office" required>
+            <button type="submit">Add Professor</button>
+        </form>
         <div id="professor-data"></div>
     </div>
     <script>
-        fetch('/prof-list')
+        document.getElementById('add-professor-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const fname = document.getElementById('fname').value;
+            const lname = document.getElementById('lname').value;
+            const email = document.getElementById('email').value;
+            const dept = document.getElementById('dept').value;
+            const office = document.getElementById('office').value;
+
+            fetch('/add-professor', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ fname, lname, email, dept, office })
+            })
             .then(response => response.json())
-            .then(data => {
-                const professorDiv = document.getElementById('professor-data');
-                let html = '<ul>';
-                data.forEach(professor => {
-                    html += `<li>${professor.fname} ${professor.lname} - ${professor.email} - ${professor.dept} - ${professor.office}</li>`;
-                });
-                html += '</ul>';
-                professorDiv.innerHTML = html;
+            .then(() => {
+                fetchProfessors();
+                document.getElementById('add-professor-form').reset();
             })
             .catch(err => {
-                console.error('Failed to fetch professors:', err);
-                document.getElementById('professor-data').innerHTML = 'Failed to fetch professors. Please try again later.';
+                console.error('Failed to add professor:', err);
             });
+        });
+
+        function fetchProfessors() {
+            fetch('/prof-list')
+                .then(response => response.json())
+                .then(data => {
+                    const professorDiv = document.getElementById('professor-data');
+                    let html = '<ul>';
+                    data.forEach(professor => {
+                        html += `<li>
+                                    ${professor.fname} ${professor.lname} - ${professor.email} - ${professor.dept} - ${professor.office}
+                                    <button onclick="editProfessor('${professor._id}')">Edit</button>
+                                    <button onclick="deleteProfessor('${professor._id}')">Delete</button>
+                                 </li>`;
+                    });
+                    html += '</ul>';
+                    professorDiv.innerHTML = html;
+                })
+                .catch(err => {
+                    console.error('Failed to fetch professors:', err);
+                    document.getElementById('professor-data').innerHTML = 'Failed to fetch professors. Please try again later.';
+                });
+        }
+
+        function editProfessor(id) {
+            const fname = prompt('Enter new first name:');
+            const lname = prompt('Enter new last name:');
+            const email = prompt('Enter new email:');
+            const dept = prompt('Enter new department:');
+            const office = prompt('Enter new office:');
+            if (fname && lname && email && dept && office) {
+                fetch(`/edit-professor/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ fname, lname, email, dept, office })
+                })
+                .then(() => {
+                    fetchProfessors();
+                })
+                .catch(err => {
+                    console.error('Failed to edit professor:', err);
+                });
+            }
+        }
+
+        function deleteProfessor(id) {
+            if (confirm('Are you sure you want to delete this professor?')) {
+                fetch(`/delete-professor/${id}`, {
+                    method: 'DELETE'
+                })
+                .then(() => {
+                    fetchProfessors();
+                })
+                .catch(err => {
+                    console.error('Failed to delete professor:', err);
+                });
+            }
+        }
+
+        // Initial fetch
+        fetchProfessors();
     </script>
 </body>
 </html>

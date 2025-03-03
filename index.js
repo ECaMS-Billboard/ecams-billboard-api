@@ -56,6 +56,61 @@ app.get('/slides', (req, res) => {
   res.sendFile(path.join(__dirname, 'static', 'slides.html'));
 });
 
+// Route to add a professor to the list
+app.post('/add-professor', async (req, res) => {
+  try {
+      const { fname, lname, email, dept, office } = req.body;
+      const newProfessor = new User({
+          fname,
+          lname,
+          email,
+          dept,
+          office,
+          num_ratings: 0,       // Default value
+          overall_rating: '0'  // Default value
+      });
+      await newProfessor.save();
+      res.status(201).json({ message: 'Professor added successfully' });
+  } catch (err) {
+      console.error('Failed to add professor:', err);
+      res.status(500).json({ error: 'Failed to add professor' });
+  }
+});
+
+// Route to edit the professor info
+app.put('/edit-professor/:id', async (req, res) => {
+  try {
+      const { fname, lname, email, dept, office } = req.body;
+      const professor = await User.findByIdAndUpdate(
+          req.params.id,
+          { fname, lname, email, dept, office },
+          { new: true }
+      );
+      if (!professor) {
+          return res.status(404).json({ error: 'Professor not found' });
+      }
+      res.json({ message: 'Professor updated successfully' });
+  } catch (err) {
+      console.error('Failed to edit professor:', err);
+      res.status(500).json({ error: 'Failed to edit professor' });
+  }
+});
+
+
+// Route to delete professor info
+app.delete('/delete-professor/:id', async (req, res) => {
+  try {
+      const professor = await User.findByIdAndDelete(req.params.id);
+      if (!professor) {
+          return res.status(404).json({ error: 'Professor not found' });
+      }
+      res.json({ message: 'Professor deleted successfully' });
+  } catch (err) {
+      console.error('Failed to delete professor:', err);
+      res.status(500).json({ error: 'Failed to delete professor' });
+  }
+});
+
 
 // Route to return the list of all professors
 app.get('/prof-list', async (req, res) => {
