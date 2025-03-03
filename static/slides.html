@@ -61,6 +61,8 @@
                                     <img src="/image/${slide.filename}" alt="${slide.filename}">
                                     <p>${slide.filename}</p>
                                     <p>${slide.description} - ${slide.notes}</p>
+                                    <button onclick="approveSlide('${slide._id}', true)">Approve</button>
+                                    <button onclick="approveSlide('${slide._id}', false)">Disapprove</button>
                                     <button onclick="deleteSlide('${slide._id}')">Delete</button>
                                  </li>`;
                     });
@@ -71,6 +73,22 @@
                     console.error('Failed to fetch slides:', err);
                     document.getElementById('slides-data').innerHTML = 'Failed to fetch slides. Please try again later.';
                 });
+        }
+
+        function approveSlide(id, approved) {
+            fetch(`/approve-slide/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ approved })
+            })
+            .then(() => {
+                fetchSlides();
+            })
+            .catch(err => {
+                console.error('Failed to update slide:', err);
+            });
         }
 
         function deleteSlide(id) {
