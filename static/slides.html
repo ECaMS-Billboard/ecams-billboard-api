@@ -11,32 +11,84 @@
         ul { list-style-type: none; padding: 0; }
         li { background-color: #e9ecef; margin: 5px 0; padding: 10px; border-radius: 5px; padding: 10px; }
         img { max-width: 300px; height: auto; }
+        form { margin-bottom: 20px; }
+        input, button { margin: 5px; padding: 5px; border-radius: 5px; border: 1px solid #ced4da; }
+        button { cursor: pointer; transition: background-color 0.3s; }
+        button:hover { background-color: #0056b3; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Slides</h1>
+        <form id="add-slide-form" enctype="multipart/form-data">
+            <input type="file" id="slide-file" accept="image/*" required>
+            <input type="text" id="description" placeholder="Description">
+            <input type="text" id="notes" placeholder="Notes">
+            <button type="submit">Add Slide</button>
+        </form>
         <div id="slides-data"></div>
     </div>
     <script>
-        fetch('/list-images')
+        document.getElementById('add-slide-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const formData = new FormData();
+            formData.append('file', document.getElementById('slide-file').files[0]);
+            formData.append('description', document.getElementById('description').value);
+            formData.append('notes', document.getElementById('notes').value);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
             .then(response => response.json())
-            .then(data => {
-                const slidesDiv = document.getElementById('slides-data');
-                let html = '<ul>';
-                data.forEach(slide => {
-                    html += `<li>
-                                <img src="/image/${slide.filename}" alt="${slide.filename}">
-                                <p>${slide.filename}</p>
-                             </li>`;
-                });
-                html += '</ul>';
-                slidesDiv.innerHTML = html;
+            .then(() => {
+                fetchSlides();
+                document.getElementById('add-slide-form').reset();
             })
             .catch(err => {
-                console.error('Failed to fetch slides:', err);
-                document.getElementById('slides-data').innerHTML = 'Failed to fetch slides. Please try again later.';
+                console.error('Failed to upload slide:', err);
             });
+        });
+
+        function fetchSlides() {
+            fetch('/list-images')
+                .then(response => response.json())
+                .then(data => {
+                    const slidesDiv = document.getElementById('slides-data');
+                    let html = '<ul>';
+                    data.forEach(slide => {
+                        html += `<li>
+                                    <img src="/image/${slide.filename}" alt="${slide.filename}">
+                                    <p>${slide.filename}</p>
+                                    <p>${slide.description} - ${slide.notes}</p>
+                                    <button onclick="deleteSlide('${slide._id}')">Delete</button>
+                                 </li>`;
+                    });
+                    html += '</ul>';
+                    slidesDiv.innerHTML = html;
+                })
+                .catch(err => {
+                    console.error('Failed to fetch slides:', err);
+                    document.getElementById('slides-data').innerHTML = 'Failed to fetch slides. Please try again later.';
+                });
+        }
+
+        function deleteSlide(id) {
+            if (confirm('Are you sure you want to delete this slide?')) {
+                fetch(`/delete-slide/${id}`, {
+                    method: 'DELETE'
+                })
+                .then(() => {
+                    fetchSlides();
+                })
+                .catch(err => {
+                    console.error('Failed to delete slide:', err);
+                });
+            }
+        }
+
+        // Initial fetch
+        fetchSlides();
     </script>
 </body>
 </html>

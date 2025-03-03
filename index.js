@@ -164,57 +164,79 @@ const upload = multer({ storage });
 
 // Route to upload an image to MongoDB using GridFS
 app.post('/upload', upload.single('file'), async (req, res) => {
-    if (!req.file) {
+  if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
-    }
-  
-    try {
+  }
+
+  try {
       const { description = '', notes = '' } = req.body;
       const readableStream = new Readable();
       readableStream.push(req.file.buffer);
       readableStream.push(null);
-  
+
       const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
-        contentType: req.file.mimetype,
+          contentType: req.file.mimetype,
       });
-  
+
       readableStream.pipe(uploadStream);
-  
+
       uploadStream.on('finish', async () => {
-        const file = await db.collection('slides.files').findOne({ filename: req.file.originalname });
-  
-        if (!file) {
-          return res.status(500).json({ error: 'File upload failed' });
-        }
-  
-        await db.collection('Slides').insertOne({
-          filename: file.filename,
-          contentType: file.contentType,
-          length: file.length,
-          uploadDate: file.uploadDate,
-          fileId: file._id,
-          description: description,
-          notes: notes,
-          approved: false, // All slides are NOT approved by default
-        });
-  
-        res.status(201).json({
-          file,
-          message: 'Image uploaded successfully',
-          metadata: { description, approved: false }
-        });
+          const file = await db.collection('slides.files').findOne({ filename: req.file.originalname });
+
+          if (!file) {
+              return res.status(500).json({ error: 'File upload failed' });
+          }
+
+          await db.collection('Slides').insertOne({
+              filename: file.filename,
+              contentType: file.contentType,
+              length: file.length,
+              uploadDate: file.uploadDate,
+              fileId: file._id,
+              description: description,
+              notes: notes,
+              approved: false, // All slides are NOT approved by default
+          });
+
+          res.status(201).json({
+              file,
+              message: 'Image uploaded successfully',
+              metadata: { description, approved: false }
+          });
       });
-  
+
       uploadStream.on('error', (err) => {
-        console.error('Upload failed:', err);
-        res.status(500).json({ error: 'Failed to upload image', details: err });
+          console.error('Upload failed:', err);
+          res.status(500).json({ error: 'Failed to upload image', details: err });
       });
-    } catch (err) {
+  } catch (err) {
       console.error('Unexpected error during upload:', err);
       res.status(500).json({ error: 'Unexpected error occurred', details: err });
-    }
-  });
+  }
+});
 
+// Route to delete an image from MongoDB
+app.delete('/delete-slide/:id', async (req, res) => {
+  try {
+      const { id } = req.params;
+      const file = await db.collection('slides.files').findOne({ _id: new mongoose.Types.ObjectId(id) });
+
+      if (!file) {
+          return res.status(404).json({ error: 'File not found' });
+      }
+
+      // Delete the file from GridFS
+      await gfsBucket.delete(file._id);
+
+      // Remove the metadata from the Slides collection
+      await db.collection('Slides').deleteOne({ fileId: file._id });
+
+      res.json({ message: 'Slide deleted successfully' });
+  } catch (err) {
+      console.error('Failed to delete slide:', err);
+      res.status(500).json({ error: 'Failed to delete slide', details: err });
+  }
+});
 
 /* TODO: both this and AdminPanel.js on the main repo are both to be considered
    just proof of concept. This (kind of, barely) works as an authentication
