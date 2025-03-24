@@ -301,6 +301,60 @@ app.post('/login', (req, res) => {
     }
   });
 
+  // list of all approved images only for display
+  app.get('/list-approved-images', async (req, res) => {
+    try {
+        const approvedSlides = await db.collection('Slides').find({ approved: true }).toArray();
+        if (!approvedSlides || approvedSlides.length === 0) {
+            return res.status(200).json({ message: 'No approved slides found.' });
+        }
+        res.json(approvedSlides);
+    } catch (err) {
+        console.error('Failed to list approved slides:', err);
+        res.status(500).json({ error: 'Failed to list approved slides', details: err });
+    }
+});
+
+// This is for approving slides
+app.put('/approve-slide/:id', async (req, res) => {
+  try {
+      const { id } = req.params;
+      const slide = await db.collection('Slides').updateOne(
+          { fileId: new mongoose.Types.ObjectId(id) },
+          { $set: { approved: true } }
+      );
+
+      if (!slide.matchedCount) {
+          return res.status(404).json({ error: 'Slide not found' });
+      }
+
+      res.json({ message: 'Slide approved successfully' });
+  } catch (err) {
+      console.error('Failed to approve slide:', err);
+      res.status(500).json({ error: 'Failed to approve slide' });
+  }
+});
+
+// This is for declining slides
+app.put('/decline-slide/:id', async (req, res) => {
+  try {
+      const { id } = req.params;
+      const slide = await db.collection('Slides').updateOne(
+          { fileId: new mongoose.Types.ObjectId(id) },
+          { $set: { approved: false } }
+      );
+
+      if (!slide.matchedCount) {
+          return res.status(404).json({ error: 'Slide not found' });
+      }
+
+      res.json({ message: 'Slide declined successfully' });
+  } catch (err) {
+      console.error('Failed to decline slide:', err);
+      res.status(500).json({ error: 'Failed to decline slide' });
+  }
+});
+
 // Custom 404 page
 app.use((req, res) => {
     res.type('text/plain')
