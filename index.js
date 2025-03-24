@@ -290,14 +290,14 @@ app.post('/login', (req, res) => {
   // Route to return all images (as JSON)
   app.get('/list-images', async (req, res) => {
     try {
-      const files = await db.collection('slides.files').find().toArray();
-      if (!files || files.length === 0) {
+      const slides = await db.collection('Slides').find().toArray();
+      if (!slides || slides.length === 0) {
         return res.status(404).json({ message: 'No images found.' });
       }
-      res.json(files);
+      res.json(slides); // Return slides instead of files
     } catch (err) {
-      console.error('Failed to list images:', err);
-      res.status(500).json({ error: 'Failed to list images', details: err });
+        console.error('Failed to list images:', err);
+        es.status(500).json({ error: 'Failed to list images', details: err });
     }
   });
 
