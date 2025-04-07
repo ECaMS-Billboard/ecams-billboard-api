@@ -59,6 +59,10 @@ app.get('/slides', (req, res) => {
   res.sendFile(path.join(__dirname, 'static', 'slides.html'));
 });
 
+// Configuration for file uploads
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
 // Route to upload a professor with an image
 app.post('/add-professor', upload.single('image'), async (req, res) => {
   try {
@@ -203,10 +207,6 @@ db.once('open', () => {
   });
   console.log('GridFSBucket for "slides" initialized.');
 });
-
-// Configuration for file uploads
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
 
 // Route to upload an image to MongoDB using GridFS
 app.post('/upload', upload.single('file'), async (req, res) => {
