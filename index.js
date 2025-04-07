@@ -63,16 +63,43 @@ app.get('/slides', (req, res) => {
 app.post('/add-professor', upload.single('image'), async (req, res) => {
   try {
       const { fname, lname, email, dept, office } = req.body;
-      const newProfessor = new User({
-          fname,
-          lname,
-          email,
-          dept,
-          office,
-          image: req.file ? req.file.filename : null, // Save the image filename
+
+      // Create a readable stream from the uploaded file
+      const readableStream = new Readable();
+      readableStream.push(req.file.buffer);
+      readableStream.push(null);
+
+      // Upload the image to GridFS
+      const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
+          contentType: req.file.mimetype,
       });
-      await newProfessor.save();
-      res.status(201).json({ message: 'Professor added successfully' });
+
+      readableStream.pipe(uploadStream);
+
+      uploadStream.on('finish', async () => {
+          const file = await db.collection('slides.files').findOne({ filename: req.file.originalname });
+
+          if (!file) {
+              return res.status(500).json({ error: 'Image upload failed' });
+          }
+
+          // Create a new professor with the image fileId
+          const newProfessor = new User({
+              fname,
+              lname,
+              email,
+              dept,
+              office,
+              image: file._id, // Save the image fileId
+          });
+          await newProfessor.save();
+          res.status(201).json({ message: 'Professor added successfully' });
+      });
+
+      uploadStream.on('error', (err) => {
+          console.error('Upload failed:', err);
+          res.status(500).json({ error: 'Failed to upload image', details: err });
+      });
   } catch (err) {
       console.error('Failed to add professor:', err);
       res.status(500).json({ error: 'Failed to add professor' });
@@ -84,9 +111,36 @@ app.put('/edit-professor/:id', upload.single('image'), async (req, res) => {
   try {
       const { fname, lname, email, dept, office } = req.body;
       const updateData = { fname, lname, email, dept, office };
+
       if (req.file) {
-          updateData.image = req.file.filename; // Update image if provided
+          // Create a readable stream from the uploaded file
+          const readableStream = new Readable();
+          readableStream.push(req.file.buffer);
+          readableStream.push(null);
+
+          // Upload the new image to GridFS
+          const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
+              contentType: req.file.mimetype,
+          });
+
+          readableStream.pipe(uploadStream);
+
+          uploadStream.on('finish', async () => {
+              const file = await db.collection('slides.files').findOne({ filename: req.file.originalname });
+
+              if (!file) {
+                  return res.status(500).json({ error: 'Image upload failed' });
+              }
+
+              updateData.image = file._id; // Update image fileId
+          });
+
+          uploadStream.on('error', (err) => {
+              console.error('Upload failed:', err);
+              return res.status(500).json({ error: 'Failed to upload image', details: err });
+          });
       }
+
       const professor = await User.findByIdAndUpdate(req.params.id, updateData, { new: true });
       if (!professor) {
           return res.status(404).json({ error: 'Professor not found' });
@@ -259,25 +313,26 @@ app.post('/login', (req, res) => {
 });
 
 
-  // Route to fetch an image by filename
-  app.get('/image/:filename', async (req, res) => {
+// Route to fetch an image by fileId
+app.get('/image/:id', async (req, res) => {
     try {
-      const { filename } = req.params;
-      const file = await db.collection('slides.files').findOne({ filename });
-  
-      if (!file) {
-        console.log(`File not found: ${filename}`);
-        return res.status(404).json({ error: `File not found: ${filename}` });
-      }
-  
-      const readStream = gfsBucket.openDownloadStreamByName(filename);
-      res.set('Content-Type', file.contentType);
-      readStream.pipe(res);
+        const { id } = req.params;
+        const file = await db.collection('slides.files').findOne({ _id: new mongoose.Types.ObjectId(id) });
+
+        if (!file) {
+            console.log(`File not found: ${id}`);
+            return res.status(404).json({ error: `File not found: ${id}` });
+        }
+
+        const readStream = gfsBucket.openDownloadStream(file._id);
+        res.set('Content-Type', file.contentType);
+        readStream.pipe(res);
     } catch (err) {
-      console.error('Error fetching image:', err);
-      res.status(500).json({ error: 'Failed to fetch image', details: err });
+        console.error('Error fetching image:', err);
+        res.status(500).json({ error: 'Failed to fetch image', details: err });
     }
-  });
+});
+
   
   // Route to return all images (as JSON)
   app.get('/list-images', async (req, res) => {
