@@ -61,28 +61,28 @@
             });
         });
 
-        function fetchProfessors() {
-            fetch('/prof-list')
-                .then(response => response.json())
-                .then(data => {
-                    const professorDiv = document.getElementById('professor-data');
-                    let html = '<ul>';
-                    data.forEach(professor => {
-                        html += `<li>
-                                    <img src="/image/${professor.image}" alt="${professor.fname} ${professor.lname}" style="max-width: 100px; height: auto;"> <!-- Display the professor's image -->
-                                    ${professor.fname} ${professor.lname} - ${professor.email} - ${professor.dept} - ${professor.office}
-                                    <button onclick="editProfessor('${professor._id}')">Edit</button>
-                                    <button onclick="deleteProfessor('${professor._id}')">Delete</button>
-                                 </li>`;
-                    });
-                    html += '</ul>';
-                    professorDiv.innerHTML = html;
-                })
-                .catch(err => {
-                    console.error('Failed to fetch professors:', err);
-                    document.getElementById('professor-data').innerHTML = 'Failed to fetch professors. Please try again later.';
-                });
-        }
+function fetchProfessors() {
+    fetch('/prof-list')
+        .then(response => response.json())
+        .then(data => {
+            const professorDiv = document.getElementById('professor-data');
+            let html = '<ul>';
+            data.forEach(professor => {
+                html += `<li>
+                            <img src="/image/${professor.image}" alt="${professor.fname} ${professor.lname}" style="max-width: 100px; height: auto;">
+                            ${professor.fname} ${professor.lname} - ${professor.email} - ${professor.dept} - ${professor.office}
+                            <button onclick="editProfessor('${professor._id}')">Edit</button>
+                            <button onclick="deleteProfessor('${professor._id}')">Delete</button>
+                         </li>`;
+            });
+            html += '</ul>';
+            professorDiv.innerHTML = html;
+        })
+        .catch(err => {
+            console.error('Failed to fetch professors:', err);
+            document.getElementById('professor-data').innerHTML = 'Failed to fetch professors. Please try again later.';
+        });
+}
 
         function editProfessor(id) {
             const fname = prompt('Enter new first name:');
