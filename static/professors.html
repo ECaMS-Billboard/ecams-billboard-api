@@ -108,6 +108,11 @@ function editProfessor(id) {
             const imageInput = document.createElement('input');
             imageInput.type = 'file';
             imageInput.accept = 'image/*';
+            imageInput.style.display = 'none'; // Hide the input
+
+            // Append the input to the body (required for it to work)
+            document.body.appendChild(imageInput);
+
             imageInput.onchange = function() {
                 if (imageInput.files.length > 0) {
                     formData.append('image', imageInput.files[0]); // Append the new image file
@@ -123,6 +128,9 @@ function editProfessor(id) {
                 .catch(err => {
                     console.error('Failed to edit professor:', err);
                 });
+
+                // Clean up: remove the input after use
+                document.body.removeChild(imageInput);
             };
 
             // Trigger the file input click
