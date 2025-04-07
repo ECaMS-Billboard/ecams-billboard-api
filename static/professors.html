@@ -85,70 +85,62 @@ function fetchProfessors() {
 }
 
 function editProfessor(id) {
-    // Fetch the current professor data
-    fetch(`/prof-info/${id}`)
-        .then(response => response.json())
-        .then(professor => {
-            // Pre-fill the form fields with current values
-            document.getElementById('fname').value = professor.fname;
-            document.getElementById('lname').value = professor.lname;
-            document.getElementById('email').value = professor.email;
-            document.getElementById('dept').value = professor.dept;
-            document.getElementById('office').value = professor.office;
+    const fname = prompt('Enter new first name:');
+    const lname = prompt('Enter new last name:');
+    const email = prompt('Enter new email:');
+    const dept = prompt('Enter new department:');
+    const office = prompt('Enter new office:');
 
+    if (fname && lname && email && dept && office) {
+        // Create a new FormData object
+        const formData = new FormData();
+        formData.append('fname', fname);
+        formData.append('lname', lname);
+        formData.append('email', email);
+        formData.append('dept', dept);
+        formData.append('office', office);
+
+        // Ask if the user wants to change the image
+        const changeImage = confirm('Do you want to change the image?');
+
+        if (changeImage) {
             // Create a file input element for image upload
             const imageInput = document.createElement('input');
             imageInput.type = 'file';
             imageInput.accept = 'image/*';
             imageInput.onchange = function() {
                 if (imageInput.files.length > 0) {
-                    const formData = new FormData();
-                    formData.append('fname', document.getElementById('fname').value);
-                    formData.append('lname', document.getElementById('lname').value);
-                    formData.append('email', document.getElementById('email').value);
-                    formData.append('dept', document.getElementById('dept').value);
-                    formData.append('office', document.getElementById('office').value);
                     formData.append('image', imageInput.files[0]); // Append the new image file
-
-                    // Send the request after the image is selected
-                    fetch(`/edit-professor/${id}`, {
-                        method: 'PUT',
-                        body: formData // Send FormData directly
-                    })
-                    .then(() => {
-                        fetchProfessors();
-                    })
-                    .catch(err => {
-                        console.error('Failed to edit professor:', err);
-                    });
-                } else {
-                    // If no new image is selected, just update the other fields
-                    const formData = new FormData();
-                    formData.append('fname', document.getElementById('fname').value);
-                    formData.append('lname', document.getElementById('lname').value);
-                    formData.append('email', document.getElementById('email').value);
-                    formData.append('dept', document.getElementById('dept').value);
-                    formData.append('office', document.getElementById('office').value);
-
-                    fetch(`/edit-professor/${id}`, {
-                        method: 'PUT',
-                        body: formData // Send FormData directly
-                    })
-                    .then(() => {
-                        fetchProfessors();
-                    })
-                    .catch(err => {
-                        console.error('Failed to edit professor:', err);
-                    });
                 }
+                // Send the request after the image is selected
+                fetch(`/edit-professor/${id}`, {
+                    method: 'PUT',
+                    body: formData // Send FormData directly
+                })
+                .then(() => {
+                    fetchProfessors();
+                })
+                .catch(err => {
+                    console.error('Failed to edit professor:', err);
+                });
             };
 
             // Trigger the file input click
             imageInput.click();
-        })
-        .catch(err => {
-            console.error('Failed to fetch professor info:', err);
-        });
+        } else {
+            // If the user does not want to change the image, send the request without the image
+            fetch(`/edit-professor/${id}`, {
+                method: 'PUT',
+                body: formData // Send FormData directly without image
+            })
+            .then(() => {
+                fetchProfessors();
+            })
+            .catch(err => {
+                console.error('Failed to edit professor:', err);
+            });
+        }
+    }
 }
 
         function deleteProfessor(id) {
