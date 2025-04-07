@@ -36,7 +36,7 @@
                     let html = '<ul>';
                     data.forEach(slide => {
                         html += `<li>
-                                    <img src="/image/${slide.filename}" alt="${slide.filename}">
+                                    <img src="/image/${slide.fileId}" alt="${slide.filename}">
                                     <p>${slide.filename}</p>
                                     <p>Status: ${slide.approved ? 'Approved' : 'Pending'}</p>
                                     <button onclick="approveSlide('${slide.fileId}')">Approve</button>
