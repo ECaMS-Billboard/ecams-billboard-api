@@ -18,12 +18,13 @@
 <body>
     <div class="container">
         <h1>Professors</h1>
-        <form id="add-professor-form">
+        <form id="add-professor-form" enctype="multipart/form-data">
             <input type="text" id="fname" placeholder="First Name" required>
             <input type="text" id="lname" placeholder="Last Name" required>
             <input type="email" id="email" placeholder="Email" required>
             <input type="text" id="dept" placeholder="Department" required>
             <input type="text" id="office" placeholder="Office" required>
+            <input type="file" id="image" accept="image/*" required> <!-- New file input for image -->
             <button type="submit">Add Professor</button>
         </form>
         <div id="professor-data"></div>
@@ -36,13 +37,19 @@
             const email = document.getElementById('email').value;
             const dept = document.getElementById('dept').value;
             const office = document.getElementById('office').value;
+            const imageFile = document.getElementById('image').files[0]; // Get the image file
+
+            const formData = new FormData();
+            formData.append('fname', fname);
+            formData.append('lname', lname);
+            formData.append('email', email);
+            formData.append('dept', dept);
+            formData.append('office', office);
+            formData.append('image', imageFile); // Append the image file to FormData
 
             fetch('/add-professor', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ fname, lname, email, dept, office })
+                body: formData // Send FormData directly
             })
             .then(response => response.json())
             .then(() => {
@@ -62,6 +69,7 @@
                     let html = '<ul>';
                     data.forEach(professor => {
                         html += `<li>
+                                    <img src="/image/${professor.image}" alt="${professor.fname} ${professor.lname}" style="max-width: 100px; height: auto;"> <!-- Display the professor's image -->
                                     ${professor.fname} ${professor.lname} - ${professor.email} - ${professor.dept} - ${professor.office}
                                     <button onclick="editProfessor('${professor._id}')">Edit</button>
                                     <button onclick="deleteProfessor('${professor._id}')">Delete</button>
@@ -82,13 +90,22 @@
             const email = prompt('Enter new email:');
             const dept = prompt('Enter new department:');
             const office = prompt('Enter new office:');
+            const imageFile = prompt('Enter new image URL (leave blank if not changing):'); // Optional image update
+
             if (fname && lname && email && dept && office) {
+                const formData = new FormData();
+                formData.append('fname', fname);
+                formData.append('lname', lname);
+                formData.append('email', email);
+                formData.append('dept', dept);
+                formData.append('office', office);
+                if (imageFile) {
+                    formData.append('image', imageFile); // Append new image if provided
+                }
+
                 fetch(`/edit-professor/${id}`, {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ fname, lname, email, dept, office })
+                    body: formData // Send FormData directly
                 })
                 .then(() => {
                     fetchProfessors();

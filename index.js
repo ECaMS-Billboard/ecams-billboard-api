@@ -29,18 +29,19 @@ mongoose.connect(MONGO_URI, {
   const db = mongoose.connection.useDb('EcamsBB');
   
   // MongoDB model for the professor data
-  const User = db.model(
-    'User',
-    new mongoose.Schema({
-        fname: String,
-        lname: String,
-        email: String,
-        dept: String,
-        office: String,
-        num_ratings: { type: Number, default: 0 },
-        overall_rating: { type: String, default: '0' },
-    }),
-    'Professors'
+const User = db.model(
+  'User',
+  new mongoose.Schema({
+      fname: String,
+      lname: String,
+      email: String,
+      dept: String,
+      office: String,
+      num_ratings: { type: Number, default: 0 },
+      overall_rating: { type: String, default: '0' },
+      image: String, // New field for image
+  }),
+  'Professors'
 );
 
 // Home page route
@@ -58,8 +59,8 @@ app.get('/slides', (req, res) => {
   res.sendFile(path.join(__dirname, 'static', 'slides.html'));
 });
 
-// Route to add a professor to the list
-app.post('/add-professor', async (req, res) => {
+// Route to upload a professor with an image
+app.post('/add-professor', upload.single('image'), async (req, res) => {
   try {
       const { fname, lname, email, dept, office } = req.body;
       const newProfessor = new User({
@@ -68,6 +69,7 @@ app.post('/add-professor', async (req, res) => {
           email,
           dept,
           office,
+          image: req.file ? req.file.filename : null, // Save the image filename
       });
       await newProfessor.save();
       res.status(201).json({ message: 'Professor added successfully' });
@@ -78,14 +80,14 @@ app.post('/add-professor', async (req, res) => {
 });
 
 // Route to edit the professor info
-app.put('/edit-professor/:id', async (req, res) => {
+app.put('/edit-professor/:id', upload.single('image'), async (req, res) => {
   try {
       const { fname, lname, email, dept, office } = req.body;
-      const professor = await User.findByIdAndUpdate(
-          req.params.id,
-          { fname, lname, email, dept, office },
-          { new: true }
-      );
+      const updateData = { fname, lname, email, dept, office };
+      if (req.file) {
+          updateData.image = req.file.filename; // Update image if provided
+      }
+      const professor = await User.findByIdAndUpdate(req.params.id, updateData, { new: true });
       if (!professor) {
           return res.status(404).json({ error: 'Professor not found' });
       }
@@ -95,7 +97,6 @@ app.put('/edit-professor/:id', async (req, res) => {
       res.status(500).json({ error: 'Failed to edit professor' });
   }
 });
-
 
 // Route to delete professor info
 app.delete('/delete-professor/:id', async (req, res) => {
@@ -111,43 +112,34 @@ app.delete('/delete-professor/:id', async (req, res) => {
   }
 });
 
-
-// Route to return the list of all professors
+// Route to return the list of all professors with images
 app.get('/prof-list', async (req, res) => {
-    try {
+  try {
       const users = await User.find();
       console.log('Professors:', users);
-  
       if (users.length === 0) {
-        return res.status(200).json({ message: 'No professors found.', users: [] });
-      }    
-  
+          return res.status(200).json({ message: 'No professors found.', users: [] });
+      }
       res.json(users);
-    } catch (err) {
+  } catch (err) {
       console.error('Failed to fetch professors:', err);
       res.status(500).json({ error: 'Failed to fetch professors' });
-    }
-  });
-
-// Route to get data about specific professor
-app.get('/prof-info/:id', async (req, res) => {
-    try {
-        console.log("Fetching professor with ID:", req.params.id);
-        const professor = await User.findOne({ _id: new mongoose.Types.ObjectId(req.params.id) });
-
-        if (!professor) {
-            console.log("No professor found for ID:", req.params.id);
-            return res.status(404).json({ error: "Professor not found" });
-        }
-
-        console.log("Professor found:", professor);
-        res.json(professor);
-    } catch (error) {
-        console.error("Error:", error.message);
-        res.status(500).json({ error: "An error occurred while fetching the data" });
-    }
+  }
 });
 
+// Route to get data about a specific professor
+app.get('/prof-info/:id', async (req, res) => {
+  try {
+      const professor = await User.findById(req.params.id);
+      if (!professor) {
+          return res.status(404).json({ error: 'Professor not found' });
+      }
+      res.json(professor);
+  } catch (error) {
+      console.error('Error fetching professor:', error.message);
+      res.status(500).json({ error: 'An error occurred while fetching the data' });
+  }
+});
 
 // Initialize GridFS
 let gfsBucket;
