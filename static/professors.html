@@ -85,12 +85,17 @@
         });
 }
 
-        function editProfessor(id) {
-            const fname = prompt('Enter new first name:');
-            const lname = prompt('Enter new last name:');
-            const email = prompt('Enter new email:');
-            const dept = prompt('Enter new department:');
-            const office = prompt('Enter new office:');
+function editProfessor(id) {
+    // Fetch the current professor data
+    fetch(`/prof-info/${id}`)
+        .then(response => response.json())
+        .then(professor => {
+            // Pre-fill the prompt with current values
+            const fname = prompt('Enter new first name:', professor.fname);
+            const lname = prompt('Enter new last name:', professor.lname);
+            const email = prompt('Enter new email:', professor.email);
+            const dept = prompt('Enter new department:', professor.dept);
+            const office = prompt('Enter new office:', professor.office);
 
             if (fname && lname && email && dept && office) {
                 const updateData = {
@@ -115,7 +120,11 @@
                     console.error('Failed to edit professor:', err);
                 });
             }
-        }
+        })
+        .catch(err => {
+            console.error('Failed to fetch professor info:', err);
+        });
+}
 
         function uploadImage(id) {
     // Create a file input element for image upload
