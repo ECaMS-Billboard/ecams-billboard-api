@@ -90,8 +90,14 @@ app.get('/auth/google/callback',
 );
 
 app.get('/logout', (req, res) => {
-    req.logout();
-    res.redirect('/'); // Redirect to home after logout
+    req.logout((err) => {
+        if (err) {
+            console.error('Logout error:', err); // Log the error for debugging
+            return res.status(500).send('Logout failed'); // Send a response indicating failure
+        }
+        console.log('User logged out:', req.user); // Should be undefined after logout
+        res.redirect('/'); // Redirect to home after logout
+    });
 });
 
 // Middleware to protect routes
