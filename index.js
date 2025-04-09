@@ -4,6 +4,9 @@ const mongoose = require('mongoose');
 const path = require('path');
 const multer = require('multer'); // For GridFS
 const { Readable } = require('stream');
+const session = require('express-session'); // Import express-session
+const passport = require('passport'); // Import passport
+const GoogleStrategy = require('passport-google-oauth20').Strategy; // Import Google OAuth strategy
 
 // Create Express application
 const app = express();
@@ -15,6 +18,15 @@ app.use(express.static(path.join(__dirname, 'static')));
 
 // Include JSON middleware (for /login)
 app.use(express.json());
+
+// Session setup for authentication
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: true,
+}));
+app.use(passport.initialize());
+app.use(passport.session());
 
 // MongoURI - Ensure to use an environment variable for better security in production
 require('dotenv').config();
@@ -44,18 +56,71 @@ const User = db.model(
   'Professors'
 );
 
+// Authentication code
+// Passport configuration
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: "/auth/google/callback"
+},
+(accessToken, refreshToken, profile, done) => {
+    // IN FUTURE: maybe use this to save users to database?
+    return done(null, profile);
+}));
+
+passport.serializeUser((user, done) => {
+    done(null, user);
+});
+
+passport.deserializeUser((user, done) => {
+    done(null, user);
+});
+
+// Authentication routes
+app.get('/auth/google', passport.authenticate('google', {
+    scope: ['profile', 'email']
+}));
+
+app.get('/auth/google/callback', 
+    passport.authenticate('google', { failureRedirect: '/' }),
+    (req, res) => {
+        res.redirect('/'); // Redirect to a protected route
+    }
+);
+
+app.get('/logout', (req, res) => {
+    req.logout();
+    res.redirect('/'); // Redirect to home after logout
+});
+
+// Middleware to protect routes
+function isAuthenticated(req, res, next) {
+    if (req.isAuthenticated()) {
+        return next();
+    }
+    res.redirect('/auth/google'); // Redirect to Google login if not authenticated
+}
+
+// Check authentication status
+app.get('/api/check-auth', (req, res) => {
+    if (req.isAuthenticated()) {
+        return res.status(200).json({ authenticated: true });
+    }
+    res.status(401).json({ authenticated: false });
+});
+
 // Home page route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'static', 'index.html'));
 });
 
 // Professors page route
-app.get('/professors', (req, res) => {
+app.get('/professors', isAuthenticated, (req, res) => {
   res.sendFile(path.join(__dirname, 'static', 'professors.html'));
 });
 
 // Slides page route
-app.get('/slides', (req, res) => {
+app.get('/slides', isAuthenticated, (req, res) => {
   res.sendFile(path.join(__dirname, 'static', 'slides.html'));
 });
 

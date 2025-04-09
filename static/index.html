@@ -37,8 +37,23 @@
 <body>
     <div class="container">
         <h1>Welcome to ECAMS API</h1>
-        <button onclick="window.location.href='/professors'">Professors</button>
-        <button onclick="window.location.href='/slides'">Slides</button>
+        <button onclick="window.location.href='/auth/google'">Sign in with Google</button>
+        <button onclick="window.location.href='/professors'" style="display: none;" id="professorsButton">Professors</button>
+        <button onclick="window.location.href='/slides'" style="display: none;" id="slidesButton">Slides</button>
+        <button onclick="window.location.href='/logout'" style="display: none;" id="logoutButton">Logout</button>
     </div>
+
+    <script>
+        // Check if the user is authenticated
+        fetch('/api/check-auth') // You will need to create this endpoint
+            .then(response => {
+                if (response.ok) {
+                    document.getElementById('professorsButton').style.display = 'inline-block';
+                    document.getElementById('slidesButton').style.display = 'inline-block';
+                    document.getElementById('logoutButton').style.display = 'inline-block';
+                }
+            })
+            .catch(error => console.error('Error checking authentication:', error));
+    </script>
 </body>
 </html>
