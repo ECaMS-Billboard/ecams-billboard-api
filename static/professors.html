@@ -118,33 +118,35 @@
         }
 
         function uploadImage(id) {
-            // Create a file input element for image upload
-            const imageInput = document.createElement('input');
-            imageInput.type = 'file';
-            imageInput.accept = 'image/*';
+    // Create a file input element for image upload
+    const imageInput = document.createElement('input');
+    imageInput.type = 'file';
+    imageInput.accept = 'image/*';
 
-            imageInput.onchange = function() {
-                if (imageInput.files.length > 0) {
-                    const formData = new FormData();
-                    formData.append('image', imageInput.files[0]); // Append the new image file
+    imageInput.onchange = function() {
+        if (imageInput.files.length > 0) {
+            const formData = new FormData();
+            formData.append('image', imageInput.files[0]); // Append the new image file
 
-                    // Send the request to upload the new image
-                    fetch(`/edit-professor/${id}`, {
-                        method: 'PUT',
-                        body: formData // Send FormData directly
-                    })
-                    .then(() => {
-                        fetchProfessors();
-                    })
-                    .catch(err => {
-                        console.error('Failed to upload image:', err);
-                    });
-                }
-            };
-
-            // Trigger the file input click
-            imageInput.click();
+            // Send the request to upload the new image
+            fetch(`/edit-professor/${id}`, {
+                method: 'PUT',
+                body: formData // Send FormData directly
+            })
+            .then(() => {
+                // Fetch the updated professor data after the image upload
+                fetchProfessors(); // Refresh the list of professors
+            })
+            .catch(err => {
+                console.error('Failed to upload image:', err);
+            });
         }
+    };
+
+    // Trigger the file input click
+    imageInput.click();
+}
+
 
         function deleteProfessor(id) {
             if (confirm('Are you sure you want to delete this professor?')) {
