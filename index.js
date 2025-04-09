@@ -112,48 +112,56 @@ app.post('/add-professor', upload.single('image'), async (req, res) => {
 
 // Route to edit the professor info
 app.put('/edit-professor/:id', upload.single('image'), async (req, res) => {
-  try {
-      const { fname, lname, email, dept, office } = req.body;
-      const updateData = { fname, lname, email, dept, office };
+    try {
+        const { fname, lname, email, dept, office } = req.body;
+        const updateData = { fname, lname, email, dept, office };
 
-      if (req.file) {
-          // Create a readable stream from the uploaded file
-          const readableStream = new Readable();
-          readableStream.push(req.file.buffer);
-          readableStream.push(null);
+        if (req.file) {
+            // Create a readable stream from the uploaded file
+            const readableStream = new Readable();
+            readableStream.push(req.file.buffer);
+            readableStream.push(null);
 
-          // Upload the new image to GridFS
-          const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
-              contentType: req.file.mimetype,
-          });
+            // Upload the new image to GridFS
+            const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
+                contentType: req.file.mimetype,
+            });
 
-          readableStream.pipe(uploadStream);
+            readableStream.pipe(uploadStream);
 
-          uploadStream.on('finish', async () => {
-              const file = await db.collection('slides.files').findOne({ filename: req.file.originalname });
+            uploadStream.on('finish', async () => {
+                const file = await db.collection('slides.files').findOne({ filename: req.file.originalname });
 
-              if (!file) {
-                  return res.status(500).json({ error: 'Image upload failed' });
-              }
+                if (!file) {
+                    return res.status(500).json({ error: 'Image upload failed' });
+                }
 
-              updateData.image = file._id; // Update image fileId
-          });
+                updateData.image = file._id; // Update image fileId
 
-          uploadStream.on('error', (err) => {
-              console.error('Upload failed:', err);
-              return res.status(500).json({ error: 'Failed to upload image', details: err });
-          });
-      }
+                // Update the professor's data with the new image ID
+                const professor = await User.findByIdAndUpdate(req.params.id, updateData, { new: true });
+                if (!professor) {
+                    return res.status(404).json({ error: 'Professor not found' });
+                }
+                res.json({ message: 'Professor updated successfully' });
+            });
 
-      const professor = await User.findByIdAndUpdate(req.params.id, updateData, { new: true });
-      if (!professor) {
-          return res.status(404).json({ error: 'Professor not found' });
-      }
-      res.json({ message: 'Professor updated successfully' });
-  } catch (err) {
-      console.error('Failed to edit professor:', err);
-      res.status(500).json({ error: 'Failed to edit professor' });
-  }
+            uploadStream.on('error', (err) => {
+                console.error('Upload failed:', err);
+                return res.status(500).json({ error: 'Failed to upload image', details: err });
+            });
+        } else {
+            // If no new image is uploaded, just update the other fields
+            const professor = await User.findByIdAndUpdate(req.params.id, updateData, { new: true });
+            if (!professor) {
+                return res.status(404).json({ error: 'Professor not found' });
+            }
+            res.json({ message: 'Professor updated successfully' });
+        }
+    } catch (err) {
+        console.error('Failed to edit professor:', err);
+        res.status(500).json({ error: 'Failed to edit professor' });
+    }
 });
 
 // Route to delete professor info
