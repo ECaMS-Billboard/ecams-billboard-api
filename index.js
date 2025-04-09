@@ -64,9 +64,16 @@ passport.use(new GoogleStrategy({
     clientSecret: process.env.CLIENT_SECRET,
     callbackURL: "/auth/google/callback"
 },
-(accessToken, refreshToken, profile, done) => {
-    // IN FUTURE: maybe use this to save users to database?
-    return done(null, profile);
+async (accessToken, refreshToken, profile, done) => {
+    const allowedUsers = process.env.ALLOWED_USERS.split(','); // Get allowed users from env
+    const userEmail = profile.emails[0].value; // Get the user's email
+
+    // Check if the user is allowed
+    if (allowedUsers.includes(userEmail)) {
+        return done(null, profile); // User is allowed
+    } else {
+        return done(null, false, { message: 'Unauthorized user' }); // User is not allowed
+    }
 }));
 
 passport.serializeUser((user, done) => {
@@ -85,7 +92,11 @@ app.get('/auth/google', passport.authenticate('google', {
 app.get('/auth/google/callback', 
     passport.authenticate('google', { failureRedirect: '/' }),
     (req, res) => {
-        res.redirect('/'); // Redirect to a protected route
+        if (req.user) {
+            res.redirect('/'); // Redirect to a protected route
+        } else {
+            res.status(403).send('Access denied: You are not authorized to access this site.');
+        }
     }
 );
 
