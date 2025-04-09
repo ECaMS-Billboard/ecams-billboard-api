@@ -19,6 +19,8 @@ app.use(express.static(path.join(__dirname, 'static')));
 // Include JSON middleware (for /login)
 app.use(express.json());
 
+require('dotenv').config();
+
 // Session setup for authentication
 app.use(session({
     secret: process.env.SESSION_SECRET,
@@ -29,7 +31,6 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // MongoURI - Ensure to use an environment variable for better security in production
-require('dotenv').config();
 const MONGO_URI = process.env.MONGO_URI;
 
 // Connect to MongoDB
