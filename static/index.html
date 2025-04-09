@@ -45,7 +45,7 @@
 
     <script>
         // Check if the user is authenticated
-        fetch('/api/check-auth') // You will need to create this endpoint
+        fetch('/api/check-auth')
             .then(response => {
                 if (response.ok) {
                     document.getElementById('professorsButton').style.display = 'inline-block';
