@@ -40,6 +40,7 @@
         <button onclick="window.location.href='/auth/google'">Sign in with Google</button>
         <button onclick="window.location.href='/professors'" style="display: none;" id="professorsButton">Professors</button>
         <button onclick="window.location.href='/slides'" style="display: none;" id="slidesButton">Slides</button>
+        <button onclick="window.location.href='/users'" style="display: none;" id="allowedEmailsButton">Users</button>
         <button onclick="window.location.href='/logout'" style="display: none;" id="logoutButton">Logout</button>
     </div>
 
@@ -50,6 +51,7 @@
                 if (response.ok) {
                     document.getElementById('professorsButton').style.display = 'inline-block';
                     document.getElementById('slidesButton').style.display = 'inline-block';
+                    document.getElementById('allowedEmailsButton').style.display = 'inline-block';
                     document.getElementById('logoutButton').style.display = 'inline-block';
                 }
             })

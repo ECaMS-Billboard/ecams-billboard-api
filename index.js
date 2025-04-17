@@ -57,6 +57,15 @@ const User = db.model(
   'Professors'
 );
 
+// This allows users to be added for mongo
+const AllowedEmail = db.model(
+    'AllowedEmail',
+    new mongoose.Schema({
+        email: { type: String, required: true, unique: true }
+    }),
+    'AllowedEmails'
+);
+
 // Authentication code
 // Passport configuration
 passport.use(new GoogleStrategy({
@@ -65,11 +74,11 @@ passport.use(new GoogleStrategy({
     callbackURL: "/auth/google/callback"
 },
 async (accessToken, refreshToken, profile, done) => {
-    const allowedUsers = process.env.ALLOWED_USERS.split(','); // Get allowed users from env
     const userEmail = profile.emails[0].value; // Get the user's email
 
     // Check if the user is allowed
-    if (allowedUsers.includes(userEmail)) {
+    const allowedUser = await AllowedEmail.findOne({ email: userEmail });
+    if (allowedUser) {
         return done(null, profile); // User is allowed
     } else {
         return done(null, false, { message: 'Unauthorized user' }); // User is not allowed
@@ -142,12 +151,56 @@ app.get('/slides', isAuthenticated, (req, res) => {
   res.sendFile(path.join(__dirname, 'static', 'slides.html'));
 });
 
+app.get('/users', isAuthenticated, (req, res) => {
+    res.sendFile(path.join(__dirname, 'static', 'users.html'));
+});
+
+
 // Configuration for file uploads
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
+// Route to add an allowed email
+app.post('/add-allowed-email', isAuthenticated, async (req, res) => {
+    const { email } = req.body;
+    try {
+        const newEmail = new AllowedEmail({ email });
+        await newEmail.save();
+        res.status(201).json({ message: 'Email added successfully' });
+    } catch (err) {
+        console.error('Failed to add email:', err);
+        res.status(500).json({ error: 'Failed to add email' });
+    }
+});
+
+// Route to delete an allowed email
+app.delete('/delete-allowed-email/:id', isAuthenticated, async (req, res) => {
+    try {
+        const email = await AllowedEmail.findByIdAndDelete(req.params.id);
+        if (!email) {
+            return res.status(404).json({ error: 'Email not found' });
+        }
+        res.json({ message: 'Email deleted successfully' });
+    } catch (err) {
+        console.error('Failed to delete email:', err);
+        res.status(500).json({ error: 'Failed to delete email' });
+    }
+});
+
+// Route to list all allowed emails
+app.get('/allowed-emails', isAuthenticated, async (req, res) => {
+    try {
+        const emails = await AllowedEmail.find();
+        res.json(emails);
+    } catch (err) {
+        console.error('Failed to fetch allowed emails:', err);
+        res.status(500).json({ error: 'Failed to fetch allowed emails' });
+    }
+});
+
+
 // Route to upload a professor with an image
-app.post('/add-professor', upload.single('image'), async (req, res) => {
+app.post('/add-professor', isAuthenticated, upload.single('image'), async (req, res) => {
   try {
       const { fname, lname, email, dept, office } = req.body;
 
@@ -194,7 +247,7 @@ app.post('/add-professor', upload.single('image'), async (req, res) => {
 });
 
 // Route to edit the professor info
-app.put('/edit-professor/:id', upload.single('image'), async (req, res) => {
+app.put('/edit-professor/:id', isAuthenticated, upload.single('image'), async (req, res) => {
     try {
         const { fname, lname, email, dept, office } = req.body;
         const updateData = { fname, lname, email, dept, office };
@@ -248,7 +301,7 @@ app.put('/edit-professor/:id', upload.single('image'), async (req, res) => {
 });
 
 // Route to delete professor info
-app.delete('/delete-professor/:id', async (req, res) => {
+app.delete('/delete-professor/:id', isAuthenticated, async (req, res) => {
   try {
       const professor = await User.findByIdAndDelete(req.params.id);
       if (!professor) {
@@ -353,7 +406,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 });
 
 // Route to delete an image from MongoDB
-app.delete('/delete-slide/:id', async (req, res) => {
+app.delete('/delete-slide/:id', isAuthenticated, async (req, res) => {
   try {
       const { id } = req.params;
       const file = await db.collection('slides.files').findOne({ _id: new mongoose.Types.ObjectId(id) });
@@ -454,7 +507,7 @@ app.get('/image/:id', async (req, res) => {
 });
 
 // This is for approving slides
-app.put('/approve-slide/:id', async (req, res) => {
+app.put('/approve-slide/:id', isAuthenticated, async (req, res) => {
   try {
       const { id } = req.params;
       const slide = await db.collection('Slides').updateOne(
@@ -474,7 +527,7 @@ app.put('/approve-slide/:id', async (req, res) => {
 });
 
 // This is for declining slides
-app.put('/decline-slide/:id', async (req, res) => {
+app.put('/decline-slide/:id', isAuthenticated, async (req, res) => {
   try {
       const { id } = req.params;
       const slide = await db.collection('Slides').updateOne(
