@@ -39,7 +39,9 @@
                         html += `<li>
                                     <img src="/image/${slide.fileId}" alt="${slide.filename}">
                                     <p>${slide.filename}</p>
+                                    <p>Department: <span id="department-${slide.fileId}">${slide.department}</span></p>
                                     <p>Status: ${slide.approved ? 'Approved' : 'Pending'}</p>
+                                    <button onclick="changeDepartment('${slide.fileId}')">Change Department</button>
                                     <button onclick="approveSlide('${slide.fileId}')">Approve</button>
                                     <button onclick="declineSlide('${slide.fileId}')">Decline</button>
                                     <button onclick="deleteSlide('${slide.fileId}')">Delete</button>
@@ -102,6 +104,26 @@
                 });
             }
         }
+
+        function changeDepartment(id) {
+            const newDepartment = prompt("Enter new department:", "N/A");
+            if (newDepartment) {
+                fetch(`/edit-department/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ department: newDepartment }),
+                })
+                .then(() => {
+                    document.getElementById(`department-${id}`).innerText = newDepartment; // Update the displayed department
+                })
+                .catch(err => {
+                    console.error('Failed to change department:', err);
+                });
+            }
+        }
+
 
         // Initial fetch of slides
         fetchSlides();

@@ -384,6 +384,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
               uploadDate: file.uploadDate,
               fileId: file._id,
               description: description,
+              department: 'N/A',
               notes: notes,
               approved: false, // All slides are NOT approved by default
           });
@@ -545,6 +546,28 @@ app.put('/decline-slide/:id', isAuthenticated, async (req, res) => {
       res.status(500).json({ error: 'Failed to decline slide' });
   }
 });
+
+app.put('/edit-department/:id', isAuthenticated, async (req, res) => {
+    const { id } = req.params;
+    const { department } = req.body;
+
+    try {
+        const result = await db.collection('Slides').updateOne(
+            { fileId: new mongoose.Types.ObjectId(id) },
+            { $set: { department: department } }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).json({ error: 'Slide not found' });
+        }
+
+        res.json({ message: 'Department updated successfully' });
+    } catch (err) {
+        console.error('Failed to update department:', err);
+        res.status(500).json({ error: 'Failed to update department' });
+    }
+});
+
 
 // Custom 404 page
 app.use((req, res) => {
