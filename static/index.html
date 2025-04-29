@@ -8,7 +8,7 @@
         body {
             font-family: Arial, sans-serif;
             background-color: #121212;
-            color: #ffffff;
+            color: #b11010;
             margin: 0;
             padding: 0;
         }
@@ -59,7 +59,7 @@
         }
 
         h1 {
-            color: #ffffff;
+            color: #b11010;
         }
 
         /* Logout button positioning */
@@ -75,6 +75,7 @@
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s;
+            display: none; /* Hidden by default */
         }
 
         #logoutButton:hover {
@@ -115,8 +116,8 @@
         <h1>Welcome to ECAMS API</h1>
     </div>
 
-    <!-- Logout Button -->
-    <button onclick="window.location.href='/logout'" id="logoutButton">Logout</button>
+    <!-- Logout Button (hidden by default) -->
+    <button onclick="window.location.href='/logout'" id="logoutButton" style="display: none;">Logout</button>
 
     <script>
         // Check if the user is authenticated
