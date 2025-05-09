@@ -38,7 +38,7 @@
     }
 
     .sidebar button {
-      background-color: #007bff;
+      background-color: #b11010;
       color: white;
       border: none;
       padding: 15px;
@@ -52,16 +52,15 @@
     }
 
     .sidebar button:hover {
-      background-color: #0056b3;
+      background-color: #920d0d;
     }
-
     .sidebar .sidebar-logout {
-      background-color: #e74c3c;
-      display: none; /* hidden by default */
+      background-color: #b11010;
+      display: none;  /* hidden by default */
     }
 
     .sidebar .sidebar-logout:hover {
-      background-color: #c0392b;
+      background-color: #920d0d;
     }
 
     .container {
@@ -82,7 +81,7 @@
       position: fixed;
       top: 20px;
       right: 20px;
-      background-color: #e74c3c;
+      background-color: #b11010;
       color: white;
       padding: 10px 20px;
       border: none;
@@ -95,7 +94,7 @@
     }
 
     #logoutButton:hover {
-      background-color: #c0392b;
+      background-color: #920d0d;
     }
 
     @media (max-width: 768px) {
@@ -155,7 +154,7 @@
 <body>
   <!-- Sidebar -->
   <div class="sidebar">
-    <h2>ECAMS API</h2>
+    <h2>ECaMS API</h2>
     <button onclick="window.location.href='/auth/google'" id="googleLoginButton">Sign in with Google</button>
     <button onclick="window.location.href='/professors'" style="display: none;" id="professorsButton">Professors</button>
     <button onclick="window.location.href='/slides'" style="display: none;" id="slidesButton">Slides</button>
@@ -165,7 +164,7 @@
 
   <!-- Main Content -->
   <div class="container">
-    <h1>Welcome to<br>ECAMS API</h1>
+    <h1>Welcome to<br>ECaMS API</h1>
   </div>
 
   <!-- Desktop Logout -->
