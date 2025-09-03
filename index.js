@@ -317,7 +317,7 @@ app.delete('/delete-professor/:id', isAuthenticated, async (req, res) => {
 // Route to return the list of all professors with images
 app.get('/prof-list', async (req, res) => {
   try {
-      const users = await User.find();
+      const users = await User.find({}, '-image'); //Prof images temporarily disabled | Originally: "const users = await User.find();"
       console.log('Professors:', users);
       if (users.length === 0) {
           return res.status(200).json({ message: 'No professors found.', users: [] });
@@ -332,7 +332,7 @@ app.get('/prof-list', async (req, res) => {
 // Route to get data about a specific professor
 app.get('/prof-info/:id', async (req, res) => {
   try {
-      const professor = await User.findById(req.params.id);
+      const professor = await User.findById(req.params.id, '-image'); // Prof images temporarily disabled | Ofiginally: "const professor = await User.findById(req.params.id);"
       if (!professor) {
           return res.status(404).json({ error: 'Professor not found' });
       }
