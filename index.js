@@ -197,10 +197,20 @@ app.get('/allowed-emails', isAuthenticated, async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch allowed emails' });
     }
 });
-
+//Limit to proffessor images-> not more than 2 MB
+const uploadProfessorImage = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 2 * 1024 * 1024 } // 2 MB
+});
+function handleUploadError(err, _req, res, next) {
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'Image cannot be larger than 2 MB' });
+    }
+    next(err);
+}
 
 // Route to upload a professor with an image
-app.post('/add-professor', isAuthenticated, upload.single('image'), async (req, res) => {
+app.post('/add-professor', isAuthenticated, uploadProfessorImage.single('image'),handleUploadError, async (req, res) => {  //before upload.single('image'), now using limit 
   try {
       const { fname, lname, email, dept, office } = req.body;
 
@@ -247,7 +257,7 @@ app.post('/add-professor', isAuthenticated, upload.single('image'), async (req, 
 });
 
 // Route to edit the professor info
-app.put('/edit-professor/:id', isAuthenticated, upload.single('image'), async (req, res) => {
+app.put('/edit-professor/:id', isAuthenticated, uploadProfessorImage.single('image'),handleUploadError, async (req, res) => {  //change in uploading from upload.single('image') to limit
     try {
         const { fname, lname, email, dept, office } = req.body;
         const updateData = { fname, lname, email, dept, office };
