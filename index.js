@@ -323,6 +323,15 @@ app.delete('/delete-professor/:id', isAuthenticated, async (req, res) => {
       res.status(500).json({ error: 'Failed to delete professor' });
   }
 });
+//format for azure blob pictures name convention
+function formatImageName(fname, lname) {
+  return `${fname}_${lname}`
+    .toLowerCase()
+    .replace(/\s+/g, "_")     
+    .replace(/[^a-z0-9_]/g, ""); 
+}
+
+module.exports = formatImageName;
 
 // Route to return the list of all professors with images
 app.get('/prof-list', async (req, res) => {
@@ -332,7 +341,16 @@ app.get('/prof-list', async (req, res) => {
       if (users.length === 0) {
           return res.status(200).json({ message: 'No professors found.', users: [] });
       }
-      res.json(users);
+      const usersWithBlobImages = users.map(u => {
+          const imgName = formatImageName(u.fname, u.lname);
+          return {
+              ...u.toObject(),
+              imageUrl: `https://ecamsblobstorageaccount.blob.core.windows.net/prof-images/${imgName}.png`
+          };
+      });
+
+      res.json(usersWithBlobImages);
+      //res.json(users);
   } catch (err) {
       console.error('Failed to fetch professors:', err);
       res.status(500).json({ error: 'Failed to fetch professors' });
@@ -346,7 +364,13 @@ app.get('/prof-info/:id', async (req, res) => {
       if (!professor) {
           return res.status(404).json({ error: 'Professor not found' });
       }
-      res.json(professor);
+      const imgName = formatImageName(professor.fname, professor.lname);
+
+      res.json({
+          ...professor.toObject(),
+          imageUrl: `https://ecamsblobstorageaccount.blob.core.windows.net/prof-images/${imgName}.png`
+      });
+      //res.json(professor);
   } catch (error) {
       console.error('Error fetching professor:', error.message);
       res.status(500).json({ error: 'An error occurred while fetching the data' });

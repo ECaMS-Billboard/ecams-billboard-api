@@ -13,6 +13,33 @@
         button { margin: 5px; }
         form { margin-bottom: 20px; }
         input { margin: 5px; padding: 5px; border-radius: 5px; border: 1px solid #ced4da; }
+        #professor-data {
+        display: flex;
+        flex-wrap: wrap; 
+        gap: 20px;       
+        justify-content: center;
+        }
+
+        .professor-item {
+        display: flex;
+        flex-direction: column; 
+        align-items: center;
+        background-color: #e9ecef;
+        padding: 10px;
+        border-radius: 5px;
+        width: 250px; 
+        }
+
+        .professor-item img {
+        max-width: 100px;
+        height: auto;
+        margin-bottom: 5px;
+        }
+
+        .professor-item button {
+        margin: 2px 0;
+        font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -67,17 +94,20 @@
         .then(response => response.json())
         .then(data => {
             const professorDiv = document.getElementById('professor-data');
-            let html = '<ul>';
-            data.forEach(professor => {
-                html += `<li>
-                            <img src="/image/${professor.image}" alt="${professor.fname} ${professor.lname}" style="max-width: 100px; height: auto;">
-                            ${professor.fname} ${professor.lname} - ${professor.email} - ${professor.dept} - ${professor.office}
-                            <button onclick="editProfessor('${professor._id}')">Edit</button>
-                            <button onclick="uploadImage('${professor._id}')">Upload Image</button>
-                            <button onclick="deleteProfessor('${professor._id}')">Delete</button>
-                         </li>`;
-            });
-            html += '</ul>';
+            const html = data.map(professor => `
+                <div class="professor-item">
+                    <img src="${professor.imageUrl}" 
+                         alt="${professor.fname} ${professor.lname}" 
+                         onerror="this.src='StaticProfessor.png'">
+                    <div>
+                        ${professor.fname} ${professor.lname}<br>
+                        ${professor.email} - ${professor.dept} - ${professor.office}<br>
+                        <button onclick="editProfessor('${professor._id}')">Edit</button>
+                        <button onclick="uploadImage('${professor._id}')">Upload Image</button>
+                        <button onclick="deleteProfessor('${professor._id}')">Delete</button>
+                    </div>
+                </div>
+            `).join('');
             professorDiv.innerHTML = html;
         })
         .catch(err => {
