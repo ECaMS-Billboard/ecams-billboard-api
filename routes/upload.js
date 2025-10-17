@@ -38,10 +38,10 @@ const upload = multer({
 // Upload route — receives POST /upload
 // -------------------------------------------------------------
 router.post('/', (req, res, next) => {
-    console.log('--- Upload request received ---');
-    console.log('Body:', req.body);
-    console.log('Headers:', req.headers);
-    console.log('File present before multer?', req.file);
+  console.log('--- Upload request received ---');
+  console.log('Body:', req.body);
+  console.log('Headers:', req.headers);
+  console.log('File present before multer?', req.file);
 
 
   // Use multer’s single-file middleware manually, so we can catch its errors
@@ -72,8 +72,8 @@ router.post('/', (req, res, next) => {
   // Pull MongoDB and GridFS bucket from app.locals (set in index.js)
   const db = req.app.locals.db;
   const gfsBucket = req.app.locals.gfsBucket;
-    console.log('db present?', !!db);
-    console.log('gfsBucket present?', !!gfsBucket);
+  console.log('db present?', !!db);
+  console.log('gfsBucket present?', !!gfsBucket);
 
   try {
     const { description = '', notes = '' } = req.body;
