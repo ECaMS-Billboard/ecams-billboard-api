@@ -383,11 +383,10 @@ db.once('open', () => {
   gfsBucket = new mongoose.mongo.GridFSBucket(db.db, {
     bucketName: 'slides',
   });
+  app.locals.gfsBucket = gfsBucket;
+  app.locals.db = db;
   console.log('GridFSBucket for "slides" initialized.');
 });
-
-app.locals.db = db;
-app.locals.gfsBucket = gfsBucket;
 
 // /uploads gets redirected to routes/upload.js
 const uploadRoutes = require('./routes/upload');

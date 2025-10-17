@@ -75,6 +75,13 @@ router.post('/', (req, res, next) => {
   console.log('db present?', !!db);
   console.log('gfsBucket present?', !!gfsBucket);
 
+  if (!db || !gfsBucket) {
+    console.error('Database or GridFSBucket not initialized yet.');
+    return res.status(500).json({ error: 'Database not ready. Please try again later.' });
+    }
+
+
+
   try {
     const { description = '', notes = '' } = req.body;
 
