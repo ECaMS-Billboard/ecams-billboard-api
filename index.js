@@ -376,6 +376,9 @@ app.get('/prof-info/:id', async (req, res) => {
       res.status(500).json({ error: 'An error occurred while fetching the data' });
   }
 });
+// /uploads gets redirected to routes/upload.js
+const uploadRoutes = require('./routes/upload');
+app.use('/upload', uploadRoutes);
 
 // Initialize GridFS
 let gfsBucket;
@@ -386,7 +389,12 @@ db.once('open', () => {
   console.log('GridFSBucket for "slides" initialized.');
 });
 
+app.locals.db = db;
+app.locals.gfsBucket = gfsBucket;
+
 // Route to upload an image to MongoDB using GridFS
+
+/*
 app.post('/upload', upload.single('file'), async (req, res) => {
   if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -439,6 +447,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       res.status(500).json({ error: 'Unexpected error occurred', details: err });
   }
 });
+*/
 
 // Route to delete an image from MongoDB
 app.delete('/delete-slide/:id', isAuthenticated, async (req, res) => {
