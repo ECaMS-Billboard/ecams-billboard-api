@@ -38,6 +38,12 @@ const upload = multer({
 // Upload route — receives POST /upload
 // -------------------------------------------------------------
 router.post('/', (req, res, next) => {
+    console.log('--- Upload request received ---');
+    console.log('Body:', req.body);
+    console.log('Headers:', req.headers);
+    console.log('File present before multer?', req.file);
+
+
   // Use multer’s single-file middleware manually, so we can catch its errors
   upload.single('file')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
@@ -66,6 +72,8 @@ router.post('/', (req, res, next) => {
   // Pull MongoDB and GridFS bucket from app.locals (set in index.js)
   const db = req.app.locals.db;
   const gfsBucket = req.app.locals.gfsBucket;
+    console.log('db present?', !!db);
+    console.log('gfsBucket present?', !!gfsBucket);
 
   try {
     const { description = '', notes = '' } = req.body;
@@ -89,6 +97,7 @@ router.post('/', (req, res, next) => {
     // Handle success
     uploadStream.on('finish', async () => {
       const file = await db.collection('slides.files').findOne({ filename: sanitizedFilename });
+      console.log('GridFS upload finished for file:', sanitizedFilename);
 
       if (!file) {
         return res.status(500).json({ error: 'File upload failed unexpectedly.' });
@@ -122,6 +131,7 @@ router.post('/', (req, res, next) => {
   } catch (err) {
     console.error('Unexpected error in upload route:', err);
     res.status(500).json({ error: 'Unexpected server error.', details: err.message });
+    console.error('GridFS upload stream failed:', err);
   }
 });
 

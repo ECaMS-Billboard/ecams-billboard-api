@@ -376,9 +376,6 @@ app.get('/prof-info/:id', async (req, res) => {
       res.status(500).json({ error: 'An error occurred while fetching the data' });
   }
 });
-// /uploads gets redirected to routes/upload.js
-const uploadRoutes = require('./routes/upload');
-app.use('/upload', uploadRoutes);
 
 // Initialize GridFS
 let gfsBucket;
@@ -391,6 +388,11 @@ db.once('open', () => {
 
 app.locals.db = db;
 app.locals.gfsBucket = gfsBucket;
+
+// /uploads gets redirected to routes/upload.js
+const uploadRoutes = require('./routes/upload');
+app.use('/upload', uploadRoutes);
+
 
 // Route to upload an image to MongoDB using GridFS
 
