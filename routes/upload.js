@@ -1,8 +1,29 @@
 // routes/upload.js
-//
-// Handles all file uploads from the frontend (/upload endpoint).
-// This version includes input sanitization, detailed error messages,
-// and strict control over file types and size limits.
+
+/*
+Handles all file uploads from the frontend (/upload endpoint).
+This version includes input sanitization, detailed error messages,
+and strict control over file types and size limits.
+
+Checks supplied 
+Although with that being said, this input sanitisation is still incomplete.
+
+VULNERABILITIES: (From what I know of)
+
+1. No magic number detection (first hex characters in a file that determine the file type)
+
+2. Can be really easily spoofed by just doing filename.jpg.php or something similar
+
+3. No tracking of who uploads what or any timestamps
+
+4. Anyone can upload infinite times
+
+This doesn't implement magic numbers
+ */
+
+
+
+
 
 const express = require('express');
 const multer = require('multer');
@@ -34,9 +55,6 @@ const upload = multer({
   },
 });
 
-// -------------------------------------------------------------
-// Upload route — receives POST /upload
-// -------------------------------------------------------------
 router.post('/', (req, res, next) => {
   console.log('--- Upload request received ---');
   console.log('Body:', req.body);
@@ -47,25 +65,19 @@ router.post('/', (req, res, next) => {
   // Use multer’s single-file middleware manually, so we can catch its errors
   upload.single('file')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
-      // Handle Multer-specific errors (like file size limit)
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({ error: 'File too large. Max size is 5 MB.' });
       }
       return res.status(400).json({ error: `Upload error: ${err.message}` });
     } else if (err && err.message === 'INVALID_FILE_TYPE') {
-      // Custom error for invalid image types
       return res.status(400).json({ error: 'Invalid file type. Only PNG and JPEG are allowed.' });
     } else if (err) {
-      // Catch-all for unexpected multer errors
       return res.status(500).json({ error: 'Unexpected upload error.', details: err.message });
     }
-
-    // If no file was provided at all
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded.' });
     }
 
-    // If validation passes, proceed to upload
     next();
   });
 }, async (req, res) => {
