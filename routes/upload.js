@@ -30,6 +30,21 @@ const multer = require('multer');
 const { Readable } = require('stream');
 const router = express.Router();
 
+// -------------------------------
+// Middleware to block uploads when disabled
+// -------------------------------
+function checkSubmissionsEnabled(req, res, next) {
+  // getSubmissionsEnabled() was attached to app.locals in index.js
+  const getFlag = req.app.locals.getSubmissionsEnabled;
+
+  if (typeof getFlag === 'function' && !getFlag()) {
+    return res.status(503).json({
+      error: 'Flyer submissions are currently disabled by an administrator.'
+    });
+  }
+
+  next(); // continue if allowed
+}
 // -------------------------------------------------------------
 // Multer setup — store files in memory and validate on upload
 // -------------------------------------------------------------
@@ -55,11 +70,14 @@ const upload = multer({
   },
 });
 
-router.post('/', (req, res, next) => {
-  console.log('--- Upload request received ---');
-  console.log('Body:', req.body);
-  console.log('Headers:', req.headers);
-  console.log('File present before multer?', req.file);
+router.post(
+  '/',
+  checkSubmissionsEnabled, // ✅ run this first
+  (req, res, next) => {
+    console.log('--- Upload request received ---');
+    console.log('Body:', req.body);
+    console.log('Headers:', req.headers);
+    console.log('File present before multer?', req.file);
 
 
   // Use multer’s single-file middleware manually, so we can catch its errors

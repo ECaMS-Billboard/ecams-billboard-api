@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,7 +13,7 @@
             padding: 0;
             background-color: #f8f9fa;
         }
-        
+
         /* Sidebar */
         .sidebar {
             position: fixed;
@@ -81,6 +82,7 @@
         }
     </style>
 </head>
+
 <body>
     <!-- Sidebar -->
     <div class="sidebar">
@@ -88,6 +90,7 @@
         <button onclick="window.location.href='/professors'">Professors</button>
         <button onclick="window.location.href='/slides'">Slides</button>
         <button onclick="window.location.href='/users'">Users</button>
+        <button onclick="location.href='/admin'">Admin Panel</button>
     </div>
 
     <!-- Logout Button -->
@@ -96,10 +99,81 @@
     <!-- Main Content -->
     <div class="container">
         <!-- Page-specific content will go here -->
+
+        <!-- === Flyer Submission Toggle Section === -->
+        <!-- === Flyer Submission Toggle Section === -->
+        <div id="flyer-toggle-section" style="margin-top: 2rem; text-align: center;">
+            <h2 style="color: #b11010; font-weight: bold; margin-bottom: 0.5rem;">
+                Flyer Submission Control
+            </h2>
+            <p id="flyer-status" style="margin-bottom: 1rem; color: #ccc;">
+                Checking current status...
+            </p>
+            <button id="toggle-submissions" style="
+        padding: 0.7rem 1.5rem;
+        border: none;
+        border-radius: 10px;
+        font-weight: bold;
+        color: white;
+        background: linear-gradient(90deg, #b11010 0%, #000000 100%);
+        box-shadow: 0 0 10px rgba(177, 16, 16, 0.5);
+        transition: all 0.3s ease;
+        cursor: pointer;
+      " onmouseover="this.style.boxShadow='0 0 20px rgba(177,16,16,0.8)'"
+                onmouseout="this.style.boxShadow='0 0 10px rgba(177,16,16,0.5)'">
+                Toggle Submissions
+            </button>
+        </div>
     </div>
 
     <script>
-        // Additional JavaScript for page-specific functionality can be included here
+        // === Flyer Submission Toggle Script ===
+        async function updateFlyerStatus() {
+            try {
+                const res = await fetch('/api/admin/submissions/enabled', { credentials: 'include' });
+                const data = await res.json();
+                const statusEl = document.getElementById('flyer-status');
+                const buttonEl = document.getElementById('toggle-submissions');
+
+                if (data.submissionsEnabled) {
+                    statusEl.textContent = '✅ Flyer submissions are currently ENABLED.';
+                    buttonEl.textContent = 'Disable Submissions';
+                    buttonEl.style.backgroundColor = '#a81c1c';
+                } else {
+                    statusEl.textContent = '🚫 Flyer submissions are currently DISABLED.';
+                    buttonEl.textContent = 'Enable Submissions';
+                    buttonEl.style.backgroundColor = '#1b5e20';
+                }
+            } catch (err) {
+                document.getElementById('flyer-status').textContent = '⚠️ Unable to fetch status.';
+                console.error(err);
+            }
+        }
+
+        document.getElementById('toggle-submissions').addEventListener('click', async () => {
+            try {
+                const current = document.getElementById('flyer-status').textContent.includes('ENABLED');
+                const res = await fetch('/api/admin/submissions/enabled', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ enabled: !current }),
+                });
+
+                if (res.ok) {
+                    await updateFlyerStatus();
+                } else {
+                    alert('Failed to toggle submissions');
+                }
+            } catch (err) {
+                alert('Error toggling submissions');
+                console.error(err);
+            }
+        });
+
+        // Load initial status when page opens
+        updateFlyerStatus();
     </script>
 </body>
+
 </html>

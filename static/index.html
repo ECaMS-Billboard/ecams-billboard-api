@@ -160,6 +160,7 @@
     <button onclick="window.location.href='/slides'" style="display: none;" id="slidesButton">Slides</button>
     <button onclick="window.location.href='/users'" style="display: none;" id="allowedEmailsButton">Users</button>
     <button onclick="window.location.href='/logout'" class="sidebar-logout" id="mobileLogoutButton">Logout</button>
+    <button onclick="window.location.href='/admin'" style="display: none;" id="adminButton">Admin Panel</button>
   </div>
 
   <!-- Main Content -->
@@ -184,9 +185,10 @@
           } else {
             document.getElementById('logoutButton').style.display = 'inline-block';
           }
-        }
-      })
-      .catch(error => console.error('Error checking authentication:', error));
-  </script>
+        document.getElementById('adminButton').style.display = 'inline-block';
+      }
+    })
+    .catch(error => console.error('Error checking authentication:', error));
+</script>
 </body>
 </html>
