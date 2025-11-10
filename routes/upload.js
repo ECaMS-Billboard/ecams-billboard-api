@@ -72,7 +72,7 @@ const upload = multer({
 
 router.post(
   '/',
-  checkSubmissionsEnabled, // ✅ run this first
+  checkSubmissionsEnabled,
   (req, res, next) => {
     console.log('--- Upload request received ---');
     console.log('Body:', req.body);
