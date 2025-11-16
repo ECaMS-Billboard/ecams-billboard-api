@@ -23,6 +23,15 @@ app.use(express.json());
 
 require('dotenv').config();
 
+// Session setup for authentication
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: true,
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+
 // redirected to routes/upload.js
 const uploadRoutes = require('./routes/upload');
 app.use('/upload', uploadRoutes);
@@ -73,14 +82,6 @@ function setSubmissionsEnabled(enabled) {
 // Expose for routers (EX: routes/upload.js)
 app.locals.getSubmissionsEnabled = getSubmissionsEnabled;
 
-// Session setup for authentication
-app.use(session({
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: true,
-}));
-app.use(passport.initialize());
-app.use(passport.session());
 
 // === Admin API to read/update the flag ===
 app.get('/api/admin/submissions/enabled', isAuthenticated, (req, res) => {
