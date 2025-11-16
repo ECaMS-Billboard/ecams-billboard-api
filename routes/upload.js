@@ -10,29 +10,21 @@ Although with that being said, this input sanitisation is still incomplete.
 
 VULNERABILITIES: (From what I know of)
 
-1. No magic number detection (first hex characters in a file that determine the file type)
+1. No tracking of who uploads what or any timestamps
 
-2. Can be really easily spoofed by just doing filename.jpg.php or something similar
-
-3. No tracking of who uploads what or any timestamps
-
-4. Anyone can upload infinite times
-
-This doesn't implement magic numbers
+2. Anyone can upload infinite times
  */
-
-
-
-
 
 const express = require('express');
 const multer = require('multer');
 const { Readable } = require('stream');
+const crypto = require('crypto');
+
 const router = express.Router();
 
-// -------------------------------
+
+
 // Middleware to block uploads when disabled
-// -------------------------------
 function checkSubmissionsEnabled(req, res, next) {
   // getSubmissionsEnabled() was attached to app.locals in index.js
   const getFlag = req.app.locals.getSubmissionsEnabled;
@@ -45,9 +37,8 @@ function checkSubmissionsEnabled(req, res, next) {
 
   next(); // continue if allowed
 }
-// -------------------------------------------------------------
+
 // Multer setup — store files in memory and validate on upload
-// -------------------------------------------------------------
 const storage = multer.memoryStorage();
 
 const upload = multer({
@@ -69,6 +60,36 @@ const upload = multer({
     cb(null, true);
   },
 });
+
+function validateMagicNumber(req, res, next) {
+  if (!req.file || !req.file.buffer || req.file.buffer.length < 4) {
+    return res.status(400).json({ error: 'No file uploaded or file too small.' });
+  }
+
+  const buf = req.file.buffer;
+  const b0 = buf[0], b1 = buf[1], b2 = buf[2], b3 = buf[3];
+
+  // PNG signature: 0x89 0x50 0x4E 0x47
+  const isPNG = b0 === 0x89 && b1 === 0x50 && b2 === 0x4e && b3 === 0x47;
+
+  // JPEG signature: 0xFF 0xD8 0xFF (first three bytes)
+  const isJPG = b0 === 0xff && b1 === 0xd8 && b2 === 0xff;
+
+  if (!isPNG && !isJPG) {
+    return res.status(400).json({ error: 'Invalid file signature (not a real PNG/JPEG).' });
+  }
+
+  // attach detected ext/mime for downstream
+  req.detectedExt = isPNG ? '.png' : '.jpg';
+  req.detectedMime = isPNG ? 'image/png' : 'image/jpeg';
+
+  next();
+}
+
+function sanitizeFilename(originalName = '') {
+  // Replace anything not alnum, dot, underscore, hyphen with underscore
+  return String(originalName).replace(/[^\w.\-]/g, '_');
+}
 
 router.post(
   '/',
@@ -98,7 +119,9 @@ router.post(
 
     next();
   });
-}, async (req, res) => {
+}, 
+validateMagicNumber,
+async (req, res) => {
   // Pull MongoDB and GridFS bucket from app.locals (set in index.js)
   const db = req.app.locals.db;
   const gfsBucket = req.app.locals.gfsBucket;
@@ -108,68 +131,68 @@ router.post(
   if (!db || !gfsBucket) {
     console.error('Database or GridFSBucket not initialized yet.');
     return res.status(500).json({ error: 'Database not ready. Please try again later.' });
-    }
-
-
+  }
 
   try {
-    const { description = '', notes = '' } = req.body;
+      const { description = '', notes = '' } = req.body;
 
-    // Sanitize filename to prevent special character abuse
-    const sanitizedFilename = req.file.originalname.replace(/[^\w.\-]/g, '_');
+      const sanitizedOriginal = sanitizeFilename(req.file.originalname || 'upload');
+      
+      // strip any user-supplied extension and force the detected extension
+      const base = sanitizedOriginal.replace(/\.[^.]*$/, '') || 'file';
+      const finalFilename = `${base}${req.detectedExt}`;
 
-    // Create a readable stream from the uploaded file buffer
-    const readableStream = new Readable();
-    readableStream.push(req.file.buffer);
-    readableStream.push(null);
+      const readableStream = new Readable();
+      readableStream.push(req.file.buffer);
+      readableStream.push(null);
 
-    // Open a GridFS upload stream for this file
-    const uploadStream = gfsBucket.openUploadStream(sanitizedFilename, {
-      contentType: req.file.mimetype,
-    });
-
-    // Pipe the uploaded file data into MongoDB’s GridFS
-    readableStream.pipe(uploadStream);
-
-    // Handle success
-    uploadStream.on('finish', async () => {
-      const file = await db.collection('slides.files').findOne({ filename: sanitizedFilename });
-      console.log('GridFS upload finished for file:', sanitizedFilename);
-
-      if (!file) {
-        return res.status(500).json({ error: 'File upload failed unexpectedly.' });
-      }
-
-      // Store metadata in a separate collection
-      await db.collection('Slides').insertOne({
-        filename: file.filename,
-        contentType: file.contentType,
-        length: file.length,
-        uploadDate: file.uploadDate,
-        fileId: file._id,
-        description,
-        department: 'N/A',
-        notes,
-        approved: false,
+      const uploadStream = gfsBucket.openUploadStream(finalFilename, {
+        contentType: req.detectedMime,
       });
 
-      return res.status(201).json({
-        message: 'Image uploaded successfully.',
-        metadata: { filename: sanitizedFilename, approved: false },
+      readableStream.pipe(uploadStream);
+
+      uploadStream.on('finish', async () => {
+        try {
+          const file = await db.collection('slides.files').findOne({ filename: finalFilename });
+
+          console.log('GridFS upload finished for file:', finalFilename);
+
+          if (!file) {
+            return res.status(500).json({ error: 'Image upload failed' });
+          }
+
+          await db.collection('Slides').insertOne({
+            filename: file.filename,
+            contentType: file.contentType,
+            length: file.length,
+            uploadDate: file.uploadDate,
+            fileId: file._id,
+            description: description,
+            department: 'N/A',
+            notes: notes,
+            approved: false,
+          });
+
+          return res.status(201).json({
+            file,
+            message: 'Image uploaded successfully',
+            metadata: { description, approved: false }
+          });
+        } catch (e) {
+          console.error('Error after GridFS finish:', e);
+          return res.status(500).json({ error: 'Failed to save metadata', details: e.message });
+        }
       });
-    });
 
-    // Handle upload errors during streaming
-    uploadStream.on('error', (err) => {
-      console.error('GridFS upload error:', err);
-      res.status(500).json({ error: 'Failed to upload image.', details: err.message });
-    });
-
-  } catch (err) {
-    console.error('Unexpected error in upload route:', err);
-    res.status(500).json({ error: 'Unexpected server error.', details: err.message });
-    console.error('GridFS upload stream failed:', err);
+      uploadStream.on('error', (err) => {
+        console.error('Upload failed:', err);
+        res.status(500).json({ error: 'Failed to upload image', details: err.message });
+      });
+    } catch (err) {
+      console.error('Unexpected error in upload route:', err);
+      res.status(500).json({ error: 'Unexpected server error.', details: err.message });
+    }
   }
-});
-
+);
 module.exports = router;
