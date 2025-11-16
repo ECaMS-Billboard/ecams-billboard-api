@@ -23,6 +23,14 @@ app.use(express.json());
 
 require('dotenv').config();
 
+// redirected to routes/upload.js
+const uploadRoutes = require('./routes/upload');
+app.use('/upload', uploadRoutes);
+
+//redirects to routes/auth.js
+const authRoutes = require('./routes/auth');
+app.use('/', authRoutes);
+
 // Middleware to protect routes
 function isAuthenticated(req, res, next) {
     if (req.isAuthenticated && req.isAuthenticated()) {
@@ -62,7 +70,7 @@ function setSubmissionsEnabled(enabled) {
     return !!enabled;
 }
 
-// Expose for routers (e.g., routes/upload.js)
+// Expose for routers (EX: routes/upload.js)
 app.locals.getSubmissionsEnabled = getSubmissionsEnabled;
 
 // Session setup for authentication
@@ -161,7 +169,7 @@ passport.deserializeUser((user, done) => {
     done(null, user);
 });
 
-// Authentication routes
+/* Authentication routes THIS STUFF HAS BEEN MOVED TO /routes/auth.js
 app.get('/auth/google', passport.authenticate('google', {
     scope: ['profile', 'email']
 }));
@@ -194,7 +202,7 @@ app.get('/api/check-auth', (req, res) => {
         return res.status(200).json({ authenticated: true });
     }
     res.status(401).json({ authenticated: false });
-});
+});*/
 
 // Home page route
 app.get('/', (req, res) => {
@@ -452,10 +460,6 @@ db.once('open', () => {
     app.locals.db = db;
     console.log('GridFSBucket for "slides" initialized.');
 });
-
-// /uploads gets redirected to routes/upload.js
-const uploadRoutes = require('./routes/upload');
-app.use('/upload', uploadRoutes);
 
 
 // Route to upload an image to MongoDB using GridFS
