@@ -4,7 +4,6 @@
 Handles all file uploads from the frontend (/upload endpoint).
 This version includes input sanitization, detailed error messages,
 and strict control over file types and size limits.
-
 Checks supplied 
 Although with that being said, this input sanitisation is still incomplete.
 
