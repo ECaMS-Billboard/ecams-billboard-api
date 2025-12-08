@@ -32,23 +32,7 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-// redirected to routes/upload.js
-const uploadRoutes = require('./routes/upload');
-app.use('/upload', uploadRoutes);
-
-//redirects to routes/auth.js
-const authRoutes = require('./routes/auth');
-app.use('/', authRoutes);
-
-// Middleware to protect routes
-function isAuthenticated(req, res, next) {
-    if (req.isAuthenticated && req.isAuthenticated()) {
-        return next();
-    }
-    return res.redirect('/auth/google');
-}
-
-// ===== Flyer submissions feature flag (file-backed) =====
+// Flyer submissions feature flag (file-backed)
 const FLAG_FILE = path.join(__dirname, 'feature-flags.json');
 
 function ensureFlagFile() {
@@ -81,7 +65,25 @@ function setSubmissionsEnabled(enabled) {
 
 // Expose for routers (EX: routes/upload.js)
 app.locals.getSubmissionsEnabled = getSubmissionsEnabled;
+app.locals.setSubmissionsEnabled = setSubmissionsEnabled;
 
+
+// redirected to routes/upload.js
+const uploadRoutes = require('./routes/upload');
+app.use('/upload', uploadRoutes);
+
+// redirects to routes/auth.js
+const authRoutes = require('./routes/auth');
+app.use('/', authRoutes);
+
+
+// Middleware to protect routes
+function isAuthenticated(req, res, next) {
+    if (req.isAuthenticated && req.isAuthenticated()) {
+        return next();
+    }
+    return res.redirect('/auth/google');
+}
 
 // === Admin API to read/update the flag ===
 app.get('/api/admin/submissions/enabled', isAuthenticated, (req, res) => {
