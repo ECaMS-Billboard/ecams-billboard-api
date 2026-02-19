@@ -10,6 +10,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy; // Import Go
 const fs = require('fs');
 
 
+
 // Create Express application
 const app = express();
 const port = process.env.PORT || 3000;
@@ -20,6 +21,8 @@ app.use(express.static(path.join(__dirname, 'static')));
 
 // Include JSON middleware (for /login)
 app.use(express.json());
+
+
 
 require('dotenv').config();
 
@@ -144,7 +147,140 @@ const AllowedEmail = db.model(
     }),
     'AllowedEmails'
 );
+// MongoDB model for the tournament bracket
+const Bracket = db.model(
+    'Bracket',
+    new mongoose.Schema({
+        currentRound: { type: Number, default: 0 },
+        matchups: [
+            {
+                pair: [String],
+                votes: { type: Map, of: Number }
+            }
+        ],
+        tournamentEnded: { type: Boolean, default: false }
+    }),
+    'Bracket'
+);
+// ----------------------------
+// TOURNAMENT BRACKET ROUTES
+// ----------------------------
 
+// Initialize a new bracket
+app.post('/api/bracket/init', isAuthenticated, async (req, res) => {
+    try {
+        const { teams } = req.body; // teams: ["Team A", "Team B", ...]
+
+        if (!Array.isArray(teams) || teams.length < 2) {
+            return res.status(400).json({ error: 'You need at least 2 teams' });
+        }
+
+        // Shuffle teams for randomness
+        const shuffled = teams.sort(() => 0.5 - Math.random());
+
+        // Create matchups for the first round
+        const matchups = [];
+        for (let i = 0; i < shuffled.length; i += 2) {
+            matchups.push({
+                pair: shuffled.slice(i, i + 2),
+                votes: {} // no votes yet
+            });
+        }
+
+        // Delete any existing bracket and create a new one
+        await Bracket.deleteMany({});
+        const bracket = new Bracket({ currentRound: 1, matchups });
+        await bracket.save();
+
+        res.json({ message: 'Bracket initialized', bracket });
+    } catch (err) {
+        console.error('Failed to initialize bracket:', err);
+        res.status(500).json({ error: 'Failed to initialize bracket' });
+    }
+});
+
+// Get the current bracket
+app.get('/api/bracket', async (req, res) => {
+    try {
+        const bracket = await Bracket.findOne({});
+        if (!bracket) return res.status(404).json({ error: 'No bracket found' });
+        res.json(bracket);
+    } catch (err) {
+        console.error('Failed to fetch bracket:', err);
+        res.status(500).json({ error: 'Failed to fetch bracket' });
+    }
+});
+
+// Vote for a team in a matchup
+app.put('/api/bracket/vote', async (req, res) => {
+    try {
+        const { matchupIndex, choice } = req.body;
+        const bracket = await Bracket.findOne({});
+        if (!bracket) return res.status(404).json({ error: 'Bracket not found' });
+
+        const matchup = bracket.matchups[matchupIndex];
+        if (!matchup) return res.status(400).json({ error: 'Invalid matchup index' });
+
+        if (!matchup.pair.includes(choice)) return res.status(400).json({ error: 'Invalid team choice' });
+
+        // Increment vote count
+        matchup.votes.set(choice, (matchup.votes.get(choice) || 0) + 1);
+
+        await bracket.save();
+        res.json({ message: 'Vote recorded', bracket });
+    } catch (err) {
+        console.error('Failed to vote:', err);
+        res.status(500).json({ error: 'Failed to vote' });
+    }
+});
+
+// Advance to the next round
+app.put('/api/bracket/advance', isAuthenticated, async (req, res) => {
+    try {
+        const bracket = await Bracket.findOne({});
+        if (!bracket) return res.status(404).json({ error: 'Bracket not found' });
+        if (bracket.tournamentEnded) return res.status(400).json({ error: 'Tournament already ended' });
+
+        const winners = bracket.matchups.map(m => {
+            const [teamA, teamB] = m.pair;
+            const votesA = m.votes.get(teamA) || 0;
+            const votesB = m.votes.get(teamB) || 0;
+            return votesA >= votesB ? teamA : teamB;
+        });
+
+        if (winners.length === 1) {
+            bracket.tournamentEnded = true; // tournament finished
+            await bracket.save();
+            return res.json({ message: 'Tournament ended!', winner: winners[0], bracket });
+        }
+
+        // Create new matchups for the next round
+        const matchups = [];
+        for (let i = 0; i < winners.length; i += 2) {
+            matchups.push({ pair: winners.slice(i, i + 2), votes: {} });
+        }
+
+        bracket.matchups = matchups;
+        bracket.currentRound += 1;
+        await bracket.save();
+
+        res.json({ message: 'Advanced to next round', bracket });
+    } catch (err) {
+        console.error('Failed to advance round:', err);
+        res.status(500).json({ error: 'Failed to advance round' });
+    }
+});
+
+// Reset the bracket
+app.delete('/api/bracket/reset', isAuthenticated, async (req, res) => {
+    try {
+        await Bracket.deleteMany({});
+        res.json({ message: 'Bracket reset successfully' });
+    } catch (err) {
+        console.error('Failed to reset bracket:', err);
+        res.status(500).json({ error: 'Failed to reset bracket' });
+    }
+});
 // Authentication code
 // Passport configuration
 passport.use(new GoogleStrategy({
