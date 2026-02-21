@@ -201,14 +201,40 @@ app.post('/api/bracket/init', isAuthenticated, async (req, res) => {
 
 // Get the current bracket
 app.get('/api/bracket', async (req, res) => {
-    try {
-        const bracket = await Bracket.findOne({});
-        if (!bracket) return res.status(404).json({ error: 'No bracket found' });
-        res.json(bracket);
-    } catch (err) {
-        console.error('Failed to fetch bracket:', err);
-        res.status(500).json({ error: 'Failed to fetch bracket' });
+  try {
+    let bracket = await Bracket.findOne();
+
+    // If no bracket exists, create one
+    if (!bracket) {
+      bracket = await Bracket.create({
+        currentRound: 0,
+        matchups: [
+          {
+            pair: ['Cake', 'Ice Cream'],
+            votes: { Cake: 0, 'Ice Cream': 0 }
+          },
+          {
+            pair: ['Cookies', 'Brownies'],
+            votes: { Cookies: 0, Brownies: 0 }
+          },
+          {
+            pair: ['Pie', 'Cupcakes'],
+            votes: { Pie: 0, Cupcakes: 0 }
+          },
+          {
+            pair: ['Donuts', 'Cheesecake'],
+            votes: { Donuts: 0, Cheesecake: 0 }
+          }
+        ],
+        tournamentEnded: false
+      });
     }
+
+    res.json(bracket);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // Vote for a team in a matchup
