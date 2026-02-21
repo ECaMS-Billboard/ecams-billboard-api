@@ -260,41 +260,66 @@ app.put('/api/bracket/vote', async (req, res) => {
     }
 });
 
+
 // Advance to the next round
-app.put('/api/bracket/advance', isAuthenticated, async (req, res) => {
-    try {
-        const bracket = await Bracket.findOne({});
-        if (!bracket) return res.status(404).json({ error: 'Bracket not found' });
-        if (bracket.tournamentEnded) return res.status(400).json({ error: 'Tournament already ended' });
-
-        const winners = bracket.matchups.map(m => {
-            const [teamA, teamB] = m.pair;
-            const votesA = m.votes.get(teamA) || 0;
-            const votesB = m.votes.get(teamB) || 0;
-            return votesA >= votesB ? teamA : teamB;
-        });
-
-        if (winners.length === 1) {
-            bracket.tournamentEnded = true; // tournament finished
-            await bracket.save();
-            return res.json({ message: 'Tournament ended!', winner: winners[0], bracket });
-        }
-
-        // Create new matchups for the next round
-        const matchups = [];
-        for (let i = 0; i < winners.length; i += 2) {
-            matchups.push({ pair: winners.slice(i, i + 2), votes: {} });
-        }
-
-        bracket.matchups = matchups;
-        bracket.currentRound += 1;
-        await bracket.save();
-
-        res.json({ message: 'Advanced to next round', bracket });
-    } catch (err) {
-        console.error('Failed to advance round:', err);
-        res.status(500).json({ error: 'Failed to advance round' });
+app.put('/api/bracket/advance', async (req, res) => {
+  try {
+    const bracket = await Bracket.findOne({});
+    if (!bracket) {
+      return res.status(404).json({ error: 'Bracket not found' });
     }
+
+    if (bracket.tournamentEnded) {
+      return res.status(400).json({ error: 'Tournament already ended' });
+    }
+
+    // Determine winners of current round
+    const winners = bracket.matchups.map((m) => {
+      const [teamA, teamB] = m.pair;
+
+      const votesA = m.votes[teamA] || 0;
+      const votesB = m.votes[teamB] || 0;
+
+      return votesA >= votesB ? teamA : teamB;
+    });
+
+    // If only one winner remains → tournament finished
+    if (winners.length === 1) {
+      bracket.matchups = [
+        {
+          pair: [winners[0]],
+          votes: {}
+        }
+      ];
+      bracket.tournamentEnded = true;
+
+      await bracket.save();
+      return res.json(bracket);
+    }
+
+    // Otherwise create next round matchups
+    const nextRoundMatchups = [];
+
+    for (let i = 0; i < winners.length; i += 2) {
+      nextRoundMatchups.push({
+        pair: [winners[i], winners[i + 1]],
+        votes: {
+          [winners[i]]: 0,
+          [winners[i + 1]]: 0
+        }
+      });
+    }
+
+    bracket.matchups = nextRoundMatchups;
+    bracket.currentRound += 1;
+
+    await bracket.save();
+
+    res.json(bracket);
+  } catch (err) {
+    console.error('Failed to advance round:', err);
+    res.status(500).json({ error: 'Failed to advance round' });
+  }
 });
 
 // Reset the bracket
