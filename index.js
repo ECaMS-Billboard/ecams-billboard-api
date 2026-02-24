@@ -8,12 +8,14 @@ const session = require('express-session'); // Import express-session
 const passport = require('passport'); // Import passport
 const GoogleStrategy = require('passport-google-oauth20').Strategy; // Import Google OAuth strategy
 const fs = require('fs');
+const cron = require('node-cron');
 
 
 
 // Create Express application
 const app = express();
 const port = process.env.PORT || 3000;
+const STALE_THRESHOLD_DAYS = 30;
 app.use(cors()); // Allow CORS
 
 // Use files from the static folder
@@ -782,18 +784,65 @@ app.get('/image/:id', async (req, res) => {
 });
 
 
-// Route to return all images (as JSON)
 app.get('/list-images', async (req, res) => {
     try {
         const slides = await db.collection('Slides').find().toArray();
+
         if (!slides || slides.length === 0) {
             return res.status(404).json({ message: 'No images found.' });
         }
-        res.json(slides); // Return slides instead of files
+
+        const now = new Date();
+
+        slides.forEach(slide => {
+            if (!slide.uploadDate) return;
+
+            const uploadDate = new Date(slide.uploadDate);
+            const ageMs = now - uploadDate;
+            const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+
+            if (ageDays >= STALE_THRESHOLD_DAYS) {
+                console.warn(
+                    `Slide "${slide.filename}" (${slide.fileId}) is ${ageDays} days old and may be obsolete.`
+                );
+            }
+        });
+
+        res.json(slides);
+
     } catch (err) {
         console.error('Failed to list images:', err);
         res.status(500).json({ error: 'Failed to list images', details: err });
     }
+});
+       cron.schedule('0 0 * * 0', async () => {
+    console.log('Running weekly stale slide check...');
+
+    try {
+        const slides = await db.collection('Slides').find().toArray();
+        const now = new Date();
+
+        slides.forEach(slide => {
+            if (!slide.uploadDate) return;
+
+            const uploadDate = new Date(slide.uploadDate);
+            const ageMs = now - uploadDate;
+            const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+
+            if (ageDays >= STALE_THRESHOLD_DAYS) {
+                console.warn(
+                    `Slide "${slide.filename}" (${slide.fileId}) is ${ageDays} days old and may be obsolete.`
+                );
+            }
+        });
+
+        console.log('Weekly stale slide check complete.');
+    } catch (err) {
+        console.error('Error during weekly stale slide check:', err);
+    }
+
+}, {
+    timezone: "America/New_York"
 });
 
 // list of all approved images only for display
