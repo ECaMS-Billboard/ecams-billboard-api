@@ -711,26 +711,41 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 });
 */
 
-// Route to delete an image from MongoDB
+// Route to archive (not permanently delete) a slide
 app.delete('/delete-slide/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
-        const file = await db.collection('slides.files').findOne({ _id: new mongoose.Types.ObjectId(id) });
 
-        if (!file) {
-            return res.status(404).json({ error: 'File not found' });
+        const fileId = new mongoose.Types.ObjectId(id);
+
+        // Find slide metadata
+        const slide = await db.collection('Slides').findOne({ fileId });
+
+        if (!slide) {
+            return res.status(404).json({ error: 'Slide not found' });
         }
 
-        // Delete the file from GridFS
-        await gfsBucket.delete(file._id);
+        // Add archive metadata
+        const archivedSlide = {
+            ...slide,
+            archivedAt: new Date(),
+            archivedBy: req.user?.email || 'system'
+        };
 
-        // Remove the metadata from the Slides collection
-        await db.collection('Slides').deleteOne({ fileId: file._id });
+        // Insert into ArchivedSlides collection
+        await db.collection('ArchivedSlides').insertOne(archivedSlide);
 
-        res.json({ message: 'Slide deleted successfully' });
+        // Delete from GridFS
+        await gfsBucket.delete(fileId);
+
+        // Remove from active Slides
+        await db.collection('Slides').deleteOne({ fileId });
+
+        res.json({ message: 'Slide archived successfully' });
+
     } catch (err) {
-        console.error('Failed to delete slide:', err);
-        res.status(500).json({ error: 'Failed to delete slide', details: err });
+        console.error('Failed to archive slide:', err);
+        res.status(500).json({ error: 'Failed to archive slide', details: err });
     }
 });
 
@@ -843,6 +858,52 @@ app.get('/list-images', async (req, res) => {
 
 }, {
     timezone: "America/New_York"
+});
+
+// Route to list archived slides
+app.get('/list-archived', isAuthenticated, async (req, res) => {
+    try {
+        const archivedSlides = await db.collection('ArchivedSlides')
+            .find()
+            .sort({ archivedAt: -1 })
+            .toArray();
+
+        res.json(archivedSlides);
+    } catch (err) {
+        console.error('Failed to list archived slides:', err);
+        res.status(500).json({ error: 'Failed to list archived slides' });
+    }
+});
+
+// Restore archived slide
+app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const fileId = new mongoose.Types.ObjectId(id);
+
+        const archivedSlide = await db.collection('ArchivedSlides').findOne({ fileId });
+
+        if (!archivedSlide) {
+            return res.status(404).json({ error: 'Archived slide not found' });
+        }
+
+        // Remove archive metadata
+        delete archivedSlide._id;
+        delete archivedSlide.archivedAt;
+        delete archivedSlide.archivedBy;
+
+        // Reinsert into Slides
+        await db.collection('Slides').insertOne(archivedSlide);
+
+        // Remove from archive
+        await db.collection('ArchivedSlides').deleteOne({ fileId });
+
+        res.json({ message: 'Slide restored successfully' });
+
+    } catch (err) {
+        console.error('Failed to restore slide:', err);
+        res.status(500).json({ error: 'Failed to restore slide' });
+    }
 });
 
 // list of all approved images only for display
