@@ -725,18 +725,16 @@ app.delete('/delete-slide/:id', isAuthenticated, async (req, res) => {
             return res.status(404).json({ error: 'Slide not found' });
         }
 
-        // Add archive metadata
-        const archivedSlide = {
-            ...slide,
-            archivedAt: new Date(),
-            archivedBy: req.user?.email || 'system'
-        };
+        // Clone slide
+        const archivedSlide = { ...slide };
 
-        // Insert into ArchivedSlides collection
+        // Remove original _id so Mongo generates a new one
+        delete archivedSlide._id;
+
+        archivedSlide.archivedAt = new Date();
+        archivedSlide.archivedBy = req.user?.email || 'system';
+
         await db.collection('ArchivedSlides').insertOne(archivedSlide);
-
-        // Delete from GridFS
-        await gfsBucket.delete(fileId);
 
         // Remove from active Slides
         await db.collection('Slides').deleteOne({ fileId });
@@ -881,10 +879,19 @@ app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
         const { id } = req.params;
         const fileId = new mongoose.Types.ObjectId(id);
 
-        const archivedSlide = await db.collection('ArchivedSlides').findOne({ fileId });
+        const archivedSlide = await db.collection('ArchivedSlides')
+            .findOne({ fileId });
 
         if (!archivedSlide) {
             return res.status(404).json({ error: 'Archived slide not found' });
+        }
+
+        // 🔥 Prevent duplicates
+        const existingSlide = await db.collection('Slides')
+            .findOne({ fileId });
+
+        if (existingSlide) {
+            return res.status(400).json({ error: 'Slide already restored' });
         }
 
         // Remove archive metadata
@@ -892,31 +899,16 @@ app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
         delete archivedSlide.archivedAt;
         delete archivedSlide.archivedBy;
 
-        // Reinsert into Slides
         await db.collection('Slides').insertOne(archivedSlide);
 
-        // Remove from archive
-        await db.collection('ArchivedSlides').deleteOne({ fileId });
+        await db.collection('ArchivedSlides')
+            .deleteOne({ fileId });
 
         res.json({ message: 'Slide restored successfully' });
 
     } catch (err) {
         console.error('Failed to restore slide:', err);
         res.status(500).json({ error: 'Failed to restore slide' });
-    }
-});
-
-// list of all approved images only for display
-app.get('/list-approved-images', async (req, res) => {
-    try {
-        const approvedSlides = await db.collection('Slides').find({ approved: true }).toArray();
-        if (!approvedSlides || approvedSlides.length === 0) {
-            return res.status(200).json({ message: 'No approved slides found.' });
-        }
-        res.json(approvedSlides);
-    } catch (err) {
-        console.error('Failed to list approved slides:', err);
-        res.status(500).json({ error: 'Failed to list approved slides', details: err });
     }
 });
 
