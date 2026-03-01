@@ -873,6 +873,23 @@ app.get('/list-archived', isAuthenticated, async (req, res) => {
     }
 });
 
+app.get('/list-approved-images', async (req, res) => {
+    try {
+        const slides = await db.collection('Slides')
+            .find({
+                approved: true,
+                archived: { $ne: true }
+            })
+            .toArray();
+
+        res.json(slides);
+
+    } catch (err) {
+        console.error('Failed to list approved images:', err);
+        res.status(500).json({ error: 'Failed to fetch approved images' });
+    }
+});
+
 // Restore archived slide
 app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
     try {
