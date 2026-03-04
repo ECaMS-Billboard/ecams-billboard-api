@@ -953,16 +953,30 @@ app.put('/approve-slide/:id', isAuthenticated, async (req, res) => {
 app.put('/decline-slide/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
-        const slide = await db.collection('Slides').updateOne(
-            { fileId: new mongoose.Types.ObjectId(id) },
-            { $set: { approved: false } }
-        );
+        const fileId = new mongoose.Types.ObjectId(id);
 
-        if (!slide.matchedCount) {
+        const slide = await db.collection('Slides').findOne({ fileId });
+
+        if (!slide) {
             return res.status(404).json({ error: 'Slide not found' });
         }
 
-        res.json({ message: 'Slide declined successfully' });
+        // Clone slide
+        const archivedSlide = { ...slide };
+        delete archivedSlide._id;
+
+        archivedSlide.archivedAt = new Date();
+        archivedSlide.archivedBy = req.user?.email || 'system';
+        archivedSlide.declineReason = 'Admin declined submission';
+
+        // Move to archive
+        await db.collection('ArchivedSlides').insertOne(archivedSlide);
+
+        // Remove from active Slides
+        await db.collection('Slides').deleteOne({ fileId });
+
+        res.json({ message: 'Slide declined and archived successfully' });
+
     } catch (err) {
         console.error('Failed to decline slide:', err);
         res.status(500).json({ error: 'Failed to decline slide' });
