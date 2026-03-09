@@ -149,190 +149,217 @@ const AllowedEmail = db.model(
     }),
     'AllowedEmails'
 );
-// MongoDB model for the tournament bracket
-const Bracket = db.model(
-    'Bracket',
-    new mongoose.Schema({
-        currentRound: { type: Number, default: 0 },
-        matchups: [
-            {
-                pair: [String],
-                votes: { type: Map, of: Number }
-            }
-        ],
-        tournamentEnded: { type: Boolean, default: false }
-    }),
-    'Bracket'
-);
-// ----------------------------
-// TOURNAMENT BRACKET ROUTES
-// ----------------------------
 
-// Initialize a new bracket
-app.post('/api/bracket/init', isAuthenticated, async (req, res) => {
-    try {
-        const { teams } = req.body; // teams: ["Team A", "Team B", ...]
 
-        if (!Array.isArray(teams) || teams.length < 2) {
-            return res.status(400).json({ error: 'You need at least 2 teams' });
-        }
 
-        // Shuffle teams for randomness
-        const shuffled = teams.sort(() => 0.5 - Math.random());
-
-        // Create matchups for the first round
-        const matchups = [];
-        for (let i = 0; i < shuffled.length; i += 2) {
-            matchups.push({
-                pair: shuffled.slice(i, i + 2),
-                votes: {} // no votes yet
-            });
-        }
-
-        // Delete any existing bracket and create a new one
-        await Bracket.deleteMany({});
-        const bracket = new Bracket({ currentRound: 1, matchups });
-        await bracket.save();
-
-        res.json({ message: 'Bracket initialized', bracket });
-    } catch (err) {
-        console.error('Failed to initialize bracket:', err);
-        res.status(500).json({ error: 'Failed to initialize bracket' });
-    }
-});
-
-// Get the current bracket
-app.get('/api/bracket', async (req, res) => {
-  try {
-    let bracket = await Bracket.findOne();
-
-    // If no bracket exists, create one
-    if (!bracket) {
-      bracket = await Bracket.create({
-        currentRound: 0,
-        matchups: [
-          {
-            pair: ['Cake', 'Ice Cream'],
-            votes: { Cake: 0, 'Ice Cream': 0 }
-          },
-          {
-            pair: ['Cookies', 'Brownies'],
-            votes: { Cookies: 0, Brownies: 0 }
-          },
-          {
-            pair: ['Pie', 'Cupcakes'],
-            votes: { Pie: 0, Cupcakes: 0 }
-          },
-          {
-            pair: ['Donuts', 'Cheesecake'],
-            votes: { Donuts: 0, Cheesecake: 0 }
-          }
-        ],
-        tournamentEnded: false
-      });
-    }
-
-    res.json(bracket);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+const matchupSchema = new mongoose.Schema({
+  pair: [String],
+  votes: {
+    type: Map,
+    of: Number,
+    default: {}
   }
 });
 
-// Vote for a team in a matchup
-app.put('/api/bracket/vote', async (req, res) => {
-    try {
-        const { matchupIndex, choice } = req.body;
-        const bracket = await Bracket.findOne({});
-        if (!bracket) return res.status(404).json({ error: 'Bracket not found' });
-
-        const matchup = bracket.matchups[matchupIndex];
-        if (!matchup) return res.status(400).json({ error: 'Invalid matchup index' });
-
-        if (!matchup.pair.includes(choice)) return res.status(400).json({ error: 'Invalid team choice' });
-
-        // Increment vote count
-        matchup.votes.set(choice, (matchup.votes.get(choice) || 0) + 1);
-
-        await bracket.save();
-        res.json({ message: 'Vote recorded', bracket });
-    } catch (err) {
-        console.error('Failed to vote:', err);
-        res.status(500).json({ error: 'Failed to vote' });
-    }
+const bracketSchema = new mongoose.Schema({
+  topic: String,
+  currentRound: {
+    type: Number,
+    default: 0
+  },
+  matchups: [matchupSchema],
+  roundStart: {
+    type: Date,
+    default: Date.now
+  },
+  tournamentEnded: {
+    type: Boolean,
+    default: false
+  }
 });
 
+const Bracket = mongoose.model("Bracket", bracketSchema);
 
-// Advance to the next round
-app.put('/api/bracket/advance', async (req, res) => {
-  try {
-    const bracket = await Bracket.findOne({});
-    if (!bracket) {
-      return res.status(404).json({ error: 'Bracket not found' });
-    }
+/* =========================
+   CREATE MARCH BRACKET
+========================= */
 
-    if (bracket.tournamentEnded) {
-      return res.status(400).json({ error: 'Tournament already ended' });
-    }
+const createMarchBracket = async () => {
 
-    // Determine winners of current round
-    const winners = bracket.matchups.map((m) => {
-      const [teamA, teamB] = m.pair;
+  const items = [
+    "Nachos",
+    "Pizza",
+    "Popcorn",
+    "Pretzels",
+    "Wings",
+    "Chips & Salsa",
+    "Mozzarella Sticks",
+    "Sliders"
+  ];
 
-      const votesA = m.votes[teamA] || 0;
-      const votesB = m.votes[teamB] || 0;
+  const matchups = [];
 
-      return votesA >= votesB ? teamA : teamB;
+  for (let i = 0; i < items.length; i += 2) {
+
+    const pair = [items[i], items[i + 1]];
+
+    matchups.push({
+      pair,
+      votes: {
+        [pair[0]]: 0,
+        [pair[1]]: 0
+      }
     });
 
-    // If only one winner remains → tournament finished
-    if (winners.length === 1) {
-      bracket.matchups = [
-        {
-          pair: [winners[0]],
-          votes: {}
-        }
-      ];
-      bracket.tournamentEnded = true;
+  }
 
-      await bracket.save();
-      return res.json(bracket);
+  const bracket = new Bracket({
+    topic: "Best March Madness Snacks",
+    currentRound: 0,
+    matchups,
+    roundStart: new Date(),
+    tournamentEnded: false
+  });
+
+  await bracket.save();
+
+  return bracket;
+};
+
+/* =========================
+   AUTO ADVANCE ROUND
+========================= */
+
+const advanceRoundIfNeeded = async (bracket) => {
+
+  const now = new Date();
+  const week = 7 * 24 * 60 * 60 * 1000;
+
+  if (now - bracket.roundStart < week) return bracket;
+
+  const winners = bracket.matchups.map((m) => {
+
+    const [a, b] = m.pair;
+
+    const aVotes = m.votes.get(a) || 0;
+    const bVotes = m.votes.get(b) || 0;
+
+    return aVotes >= bVotes ? a : b;
+
+  });
+
+  if (winners.length === 1) {
+
+    bracket.tournamentEnded = true;
+    bracket.matchups = [{ pair: [winners[0]], votes: {} }];
+
+    await bracket.save();
+    return bracket;
+
+  }
+
+  const nextRound = [];
+
+  for (let i = 0; i < winners.length; i += 2) {
+
+    const pair = [winners[i], winners[i + 1]];
+
+    nextRound.push({
+      pair,
+      votes: {
+        [pair[0]]: 0,
+        [pair[1]]: 0
+      }
+    });
+
+  }
+
+  bracket.matchups = nextRound;
+  bracket.currentRound += 1;
+  bracket.roundStart = new Date();
+
+  await bracket.save();
+
+  return bracket;
+
+};
+
+/* =========================
+   GET BRACKET
+========================= */
+
+app.get("/api/bracket", async (req, res) => {
+
+  try {
+
+    let bracket = await Bracket.findOne();
+
+    if (!bracket) {
+      bracket = await createMarchBracket();
     }
 
-    // Otherwise create next round matchups
-    const nextRoundMatchups = [];
+    bracket = await advanceRoundIfNeeded(bracket);
 
-    for (let i = 0; i < winners.length; i += 2) {
-      nextRoundMatchups.push({
-        pair: [winners[i], winners[i + 1]],
-        votes: {
-          [winners[i]]: 0,
-          [winners[i + 1]]: 0
-        }
-      });
-    }
+    res.json(bracket);
 
-    bracket.matchups = nextRoundMatchups;
-    bracket.currentRound += 1;
+  } catch (err) {
+
+    res.status(500).json({ error: err.message });
+
+  }
+
+});
+
+/* =========================
+   VOTE
+========================= */
+
+app.put("/api/bracket/vote", async (req, res) => {
+
+  const { matchupIndex, choice } = req.body;
+
+  try {
+
+    const bracket = await Bracket.findOne();
+
+    const matchup = bracket.matchups[matchupIndex];
+
+    const currentVotes = matchup.votes.get(choice) || 0;
+
+    matchup.votes.set(choice, currentVotes + 1);
 
     await bracket.save();
 
     res.json(bracket);
+
   } catch (err) {
-    console.error('Failed to advance round:', err);
-    res.status(500).json({ error: 'Failed to advance round' });
+
+    res.status(500).json({ error: err.message });
+
   }
+
 });
 
-// Reset the bracket
-app.delete('/api/bracket/reset', isAuthenticated, async (req, res) => {
-    try {
-        await Bracket.deleteMany({});
-        res.json({ message: 'Bracket reset successfully' });
-    } catch (err) {
-        console.error('Failed to reset bracket:', err);
-        res.status(500).json({ error: 'Failed to reset bracket' });
-    }
+/* =========================
+   RESET BRACKET
+========================= */
+
+app.delete("/api/bracket/reset", async (req, res) => {
+
+  await Bracket.deleteMany();
+
+  res.json({ message: "Bracket reset for March" });
+
+});
+
+/* =========================
+   SERVER
+========================= */
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
 // Authentication code
 // Passport configuration
