@@ -252,11 +252,27 @@
         }
 
         function deleteSlide(id) {
-            if (confirm('Are you sure you want to delete this slide?')) {
-                fetch(`/delete-slide/${id}`, { method: 'DELETE', credentials: 'include' })
-                    .then(() => fetchSlides())
-                    .catch(err => console.error('Failed to delete slide:', err));
-            }
+            if (!confirm('Are you sure you want to archive this slide?')) return;
+
+            fetch(`/delete-slide/${id}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Archive failed');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log(data.message);
+                // ✅ Only refresh AFTER server confirms deletion
+                fetchSlides();
+            })
+            .catch(err => {
+                console.error('Failed to archive slide:', err);
+                alert('Failed to archive slide.');
+            });
         }
 
         function changeDepartment(id) {
