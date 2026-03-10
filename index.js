@@ -14,14 +14,8 @@ const cron = require('node-cron');
 
 // Create Express application
 const app = express();
-app.use(cors({
-  origin: "https://blue-wave-096251910.4.azurestaticapps.net"
-}));
-
-app.use(express.json());
 const port = process.env.PORT || 3000;
-const STALE_THRESHOLD_DAYS = 30;
-
+app.use(cors()); // Allow CORS 
 
 // Use files from the static folder
 app.use(express.static(path.join(__dirname, 'static')));
