@@ -13,7 +13,7 @@ const fs = require('fs');
 // Create Express application
 const app = express();
 const port = process.env.PORT || 3000;
-app.use(cors()); // Allow CORS
+app.use(cors()); // Allow CORS 
 
 // Use files from the static folder
 app.use(express.static(path.join(__dirname, 'static')));
