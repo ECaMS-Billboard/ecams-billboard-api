@@ -150,6 +150,217 @@ const AllowedEmail = db.model(
     'AllowedEmails'
 );
 
+
+
+const matchupSchema = new mongoose.Schema({
+  pair: [String],
+  votes: {
+    type: Map,
+    of: Number,
+    default: {}
+  }
+});
+
+const bracketSchema = new mongoose.Schema({
+  topic: String,
+  currentRound: {
+    type: Number,
+    default: 0
+  },
+  matchups: [matchupSchema],
+  roundStart: {
+    type: Date,
+    default: Date.now
+  },
+  tournamentEnded: {
+    type: Boolean,
+    default: false
+  }
+});
+
+const Bracket = mongoose.model("Bracket", bracketSchema);
+
+/* =========================
+   CREATE MARCH BRACKET
+========================= */
+
+const createMarchBracket = async () => {
+
+  const items = [
+    "Nachos",
+    "Pizza",
+    "Popcorn",
+    "Pretzels",
+    "Wings",
+    "Chips & Salsa",
+    "Mozzarella Sticks",
+    "Sliders"
+  ];
+
+  const matchups = [];
+
+  for (let i = 0; i < items.length; i += 2) {
+
+    const pair = [items[i], items[i + 1]];
+
+    matchups.push({
+      pair,
+      votes: {
+        [pair[0]]: 0,
+        [pair[1]]: 0
+      }
+    });
+
+  }
+
+  const bracket = new Bracket({
+    topic: "Best March Madness Snacks",
+    currentRound: 0,
+    matchups,
+    roundStart: new Date(),
+    tournamentEnded: false
+  });
+
+  await bracket.save();
+
+  return bracket;
+};
+
+/* =========================
+   AUTO ADVANCE ROUND
+========================= */
+
+const advanceRoundIfNeeded = async (bracket) => {
+
+  const now = new Date();
+  const week = 7 * 24 * 60 * 60 * 1000;
+
+  if (now - bracket.roundStart < week) return bracket;
+
+  const winners = bracket.matchups.map((m) => {
+
+    const [a, b] = m.pair;
+
+    const aVotes = m.votes.get(a) || 0;
+    const bVotes = m.votes.get(b) || 0;
+
+    return aVotes >= bVotes ? a : b;
+
+  });
+
+  if (winners.length === 1) {
+
+    bracket.tournamentEnded = true;
+    bracket.matchups = [{ pair: [winners[0]], votes: {} }];
+
+    await bracket.save();
+    return bracket;
+
+  }
+
+  const nextRound = [];
+
+  for (let i = 0; i < winners.length; i += 2) {
+
+    const pair = [winners[i], winners[i + 1]];
+
+    nextRound.push({
+      pair,
+      votes: {
+        [pair[0]]: 0,
+        [pair[1]]: 0
+      }
+    });
+
+  }
+
+  bracket.matchups = nextRound;
+  bracket.currentRound += 1;
+  bracket.roundStart = new Date();
+
+  await bracket.save();
+
+  return bracket;
+
+};
+
+/* =========================
+   GET BRACKET
+========================= */
+
+app.get("/api/bracket", async (req, res) => {
+
+  try {
+
+    let bracket = await Bracket.findOne();
+
+    if (!bracket) {
+      bracket = await createMarchBracket();
+    }
+
+    bracket = await advanceRoundIfNeeded(bracket);
+
+    res.json(bracket);
+
+  } catch (err) {
+
+    res.status(500).json({ error: err.message });
+
+  }
+
+});
+
+/* =========================
+   VOTE
+========================= */
+
+app.put("/api/bracket/vote", async (req, res) => {
+
+  const { matchupIndex, choice } = req.body;
+
+  try {
+
+    const bracket = await Bracket.findOne();
+
+    const matchup = bracket.matchups[matchupIndex];
+
+    const currentVotes = matchup.votes.get(choice) || 0;
+
+    matchup.votes.set(choice, currentVotes + 1);
+
+    await bracket.save();
+
+    res.json(bracket);
+
+  } catch (err) {
+
+    res.status(500).json({ error: err.message });
+
+  }
+
+});
+
+/* =========================
+   RESET BRACKET
+========================= */
+
+app.delete("/api/bracket/reset", async (req, res) => {
+
+  await Bracket.deleteMany();
+
+  res.json({ message: "Bracket reset for March" });
+
+});
+
+/* =========================
+   SERVER
+========================= */
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 // Authentication code
 // Passport configuration
 passport.use(new GoogleStrategy({
@@ -541,18 +752,16 @@ app.delete('/delete-slide/:id', isAuthenticated, async (req, res) => {
             return res.status(404).json({ error: 'Slide not found' });
         }
 
-        // Add archive metadata
-        const archivedSlide = {
-            ...slide,
-            archivedAt: new Date(),
-            archivedBy: req.user?.email || 'system'
-        };
+        // Clone slide
+        const archivedSlide = { ...slide };
 
-        // Insert into ArchivedSlides collection
+        // Remove original _id so Mongo generates a new one
+        delete archivedSlide._id;
+
+        archivedSlide.archivedAt = new Date();
+        archivedSlide.archivedBy = req.user?.email || 'system';
+
         await db.collection('ArchivedSlides').insertOne(archivedSlide);
-
-        // Delete from GridFS
-        await gfsBucket.delete(fileId);
 
         // Remove from active Slides
         await db.collection('Slides').deleteOne({ fileId });
@@ -615,18 +824,65 @@ app.get('/image/:id', async (req, res) => {
 });
 
 
-// Route to return all images (as JSON)
 app.get('/list-images', async (req, res) => {
     try {
         const slides = await db.collection('Slides').find().toArray();
+
         if (!slides || slides.length === 0) {
             return res.status(404).json({ message: 'No images found.' });
         }
-        res.json(slides); // Return slides instead of files
+
+        const now = new Date();
+
+        slides.forEach(slide => {
+            if (!slide.uploadDate) return;
+
+            const uploadDate = new Date(slide.uploadDate);
+            const ageMs = now - uploadDate;
+            const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+
+            if (ageDays >= STALE_THRESHOLD_DAYS) {
+                console.warn(
+                    `Slide "${slide.filename}" (${slide.fileId}) is ${ageDays} days old and may be obsolete.`
+                );
+            }
+        });
+
+        res.json(slides);
+
     } catch (err) {
         console.error('Failed to list images:', err);
         res.status(500).json({ error: 'Failed to list images', details: err });
     }
+});
+       cron.schedule('0 0 * * 0', async () => {
+    console.log('Running weekly stale slide check...');
+
+    try {
+        const slides = await db.collection('Slides').find().toArray();
+        const now = new Date();
+
+        slides.forEach(slide => {
+            if (!slide.uploadDate) return;
+
+            const uploadDate = new Date(slide.uploadDate);
+            const ageMs = now - uploadDate;
+            const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+
+            if (ageDays >= STALE_THRESHOLD_DAYS) {
+                console.warn(
+                    `Slide "${slide.filename}" (${slide.fileId}) is ${ageDays} days old and may be obsolete.`
+                );
+            }
+        });
+
+        console.log('Weekly stale slide check complete.');
+    } catch (err) {
+        console.error('Error during weekly stale slide check:', err);
+    }
+
+}, {
+    timezone: "America/New_York"
 });
 
 // Route to list archived slides
@@ -644,16 +900,42 @@ app.get('/list-archived', isAuthenticated, async (req, res) => {
     }
 });
 
+app.get('/list-approved-images', async (req, res) => {
+    try {
+        const slides = await db.collection('Slides')
+            .find({
+                approved: true,
+                archived: { $ne: true }
+            })
+            .toArray();
+
+        res.json(slides);
+
+    } catch (err) {
+        console.error('Failed to list approved images:', err);
+        res.status(500).json({ error: 'Failed to fetch approved images' });
+    }
+});
+
 // Restore archived slide
 app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
         const fileId = new mongoose.Types.ObjectId(id);
 
-        const archivedSlide = await db.collection('ArchivedSlides').findOne({ fileId });
+        const archivedSlide = await db.collection('ArchivedSlides')
+            .findOne({ fileId });
 
         if (!archivedSlide) {
             return res.status(404).json({ error: 'Archived slide not found' });
+        }
+
+        // 🔥 Prevent duplicates
+        const existingSlide = await db.collection('Slides')
+            .findOne({ fileId });
+
+        if (existingSlide) {
+            return res.status(400).json({ error: 'Slide already restored' });
         }
 
         // Remove archive metadata
@@ -661,31 +943,16 @@ app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
         delete archivedSlide.archivedAt;
         delete archivedSlide.archivedBy;
 
-        // Reinsert into Slides
         await db.collection('Slides').insertOne(archivedSlide);
 
-        // Remove from archive
-        await db.collection('ArchivedSlides').deleteOne({ fileId });
+        await db.collection('ArchivedSlides')
+            .deleteOne({ fileId });
 
         res.json({ message: 'Slide restored successfully' });
 
     } catch (err) {
         console.error('Failed to restore slide:', err);
         res.status(500).json({ error: 'Failed to restore slide' });
-    }
-});
-
-// list of all approved images only for display
-app.get('/list-approved-images', async (req, res) => {
-    try {
-        const approvedSlides = await db.collection('Slides').find({ approved: true }).toArray();
-        if (!approvedSlides || approvedSlides.length === 0) {
-            return res.status(200).json({ message: 'No approved slides found.' });
-        }
-        res.json(approvedSlides);
-    } catch (err) {
-        console.error('Failed to list approved slides:', err);
-        res.status(500).json({ error: 'Failed to list approved slides', details: err });
     }
 });
 
@@ -713,16 +980,30 @@ app.put('/approve-slide/:id', isAuthenticated, async (req, res) => {
 app.put('/decline-slide/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
-        const slide = await db.collection('Slides').updateOne(
-            { fileId: new mongoose.Types.ObjectId(id) },
-            { $set: { approved: false } }
-        );
+        const fileId = new mongoose.Types.ObjectId(id);
 
-        if (!slide.matchedCount) {
+        const slide = await db.collection('Slides').findOne({ fileId });
+
+        if (!slide) {
             return res.status(404).json({ error: 'Slide not found' });
         }
 
-        res.json({ message: 'Slide declined successfully' });
+        // Clone slide
+        const archivedSlide = { ...slide };
+        delete archivedSlide._id;
+
+        archivedSlide.archivedAt = new Date();
+        archivedSlide.archivedBy = req.user?.email || 'system';
+        archivedSlide.declineReason = 'Admin declined submission';
+
+        // Move to archive
+        await db.collection('ArchivedSlides').insertOne(archivedSlide);
+
+        // Remove from active Slides
+        await db.collection('Slides').deleteOne({ fileId });
+
+        res.json({ message: 'Slide declined and archived successfully' });
+
     } catch (err) {
         console.error('Failed to decline slide:', err);
         res.status(500).json({ error: 'Failed to decline slide' });
