@@ -1,16 +1,21 @@
-const express = require('express');
-const cors = require('cors'); // Import CORS
-const mongoose = require('mongoose');
-const path = require('path');
-const multer = require('multer'); // For GridFS
-const { Readable } = require('stream');
-const session = require('express-session'); // Import express-session
-const passport = require('passport'); // Import passport
-const GoogleStrategy = require('passport-google-oauth20').Strategy; // Import Google OAuth strategy
-const fs = require('fs');
-const cron = require('node-cron');
+import dotenv from 'dotenv';
 
+import express from 'express';
+import cors from 'cors';
+import mongoose from 'mongoose';
+import path from 'path';
+import multer from 'multer';
+import { fileURLToPath } from 'url';   
+import session from 'express-session';
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import fs from 'fs';
+import { Readable } from 'stream';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, ".env") });
 
 // Create Express application
 const app = express();
@@ -22,10 +27,6 @@ app.use(express.static(path.join(__dirname, 'static')));
 
 // Include JSON middleware (for /login)
 app.use(express.json());
-
-
-
-require('dotenv').config();
 
 // Session setup for authentication
 app.use(session({
@@ -73,11 +74,11 @@ app.locals.setSubmissionsEnabled = setSubmissionsEnabled;
 
 
 // redirected to routes/upload.js
-const uploadRoutes = require('./routes/upload');
+import uploadRoutes from './routes/upload.js';
 app.use('/upload', uploadRoutes);
 
 // redirects to routes/auth.js
-const authRoutes = require('./routes/auth');
+import authRoutes from './routes/auth.js';
 app.use('/', authRoutes);
 
 
@@ -622,7 +623,7 @@ function formatImageName(fname, lname) {
         .replace(/[^a-z0-9_]/g, "");
 }
 
-module.exports = formatImageName;
+export default formatImageName;
 
 // Route to return the list of all professors with images
 app.get('/prof-list', async (req, res) => {
