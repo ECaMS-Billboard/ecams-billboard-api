@@ -16,7 +16,13 @@ import cron from 'node-cron';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: path.join(__dirname, ".env") });
+// Load environment variables from .env file (if it exists), otherwise rely on environment variables (e.g. in Azure)
+const envPath = path.join(__dirname, '.env'); 
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+} else {
+  dotenv.config(); // Azure will use environment variables
+}
 
 // Create Express application
 const app = express();
