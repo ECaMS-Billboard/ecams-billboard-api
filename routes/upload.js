@@ -15,10 +15,10 @@ VULNERABILITIES: (From what I know of)
 2. Anyone can upload infinite times
  */
 
-const express = require('express');
-const multer = require('multer');
-const { Readable } = require('stream');
-const crypto = require('crypto');
+import express from 'express';
+import multer from 'multer';
+import { Readable } from 'stream';
+import crypto from 'crypto';
 
 const router = express.Router();
 
@@ -195,4 +195,4 @@ async (req, res) => {
     }
   }
 );
-module.exports = router;
+export default router;

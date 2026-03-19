@@ -1,5 +1,5 @@
-const express = require('express');
-const passport = require('passport');
+import express from 'express';
+import passport from 'passport';
 
 const router = express.Router();
 
@@ -35,4 +35,4 @@ router.get('/api/check-auth', (req, res) => {
     res.status(401).json({ authenticated: false });
 });
 
-module.exports = router;
+export default router;
