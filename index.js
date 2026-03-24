@@ -16,6 +16,8 @@ import cron from 'node-cron';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const STALE_THRESHOLD_DAYS = process.env.STALE_THRESHOLD_DAYS || 30;
+
 // Load environment variables from .env file (if it exists), otherwise rely on environment variables (e.g. in Azure)
 const envPath = path.join(__dirname, '.env'); 
 if (fs.existsSync(envPath)) {
@@ -123,6 +125,11 @@ app.put('/api/admin/submissions/enabled', isAuthenticated, (req, res) => {
 
 // MongoURI - Ensure to use an environment variable for better security in production
 const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+    console.error("MONGO_URI is missing");
+    process.exit(1);
+}
 
 // Connect to MongoDB
 mongoose.connect(MONGO_URI, {
@@ -363,11 +370,6 @@ app.delete("/api/bracket/reset", async (req, res) => {
    SERVER
 ========================= */
 
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
 // Authentication code
 // Passport configuration
 passport.use(new GoogleStrategy({
@@ -519,6 +521,10 @@ app.post('/add-professor', isAuthenticated, uploadProfessorImage.single('image')
         readableStream.push(null);
 
         // Upload the image to GridFS
+        if (!gfsBucket) {
+            return res.status(500).json({ error: "Storage not initialized yet" });
+        }
+
         const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
             contentType: req.file.mimetype,
         });
@@ -568,6 +574,10 @@ app.put('/edit-professor/:id', isAuthenticated, uploadProfessorImage.single('ima
             readableStream.push(null);
 
             // Upload the new image to GridFS
+            if (!gfsBucket) {
+                return res.status(500).json({ error: "Storage not initialized yet" });
+            }
+
             const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
                 contentType: req.file.mimetype,
             });
@@ -821,6 +831,10 @@ app.get('/image/:id', async (req, res) => {
             return res.status(404).json({ error: `File not found: ${id}` });
         }
 
+        if (!gfsBucket) {
+            return res.status(500).json({ error: "Storage not initialized yet" });
+        }
+        
         const readStream = gfsBucket.openDownloadStream(file._id);
         res.set('Content-Type', file.contentType);
         readStream.pipe(res);
