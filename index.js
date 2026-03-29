@@ -172,6 +172,10 @@ const matchupSchema = new mongoose.Schema({
     type: Map,
     of: Number,
     default: {}
+  },
+  voters: {
+    type: [String], // store IPs
+    default: []
   }
 });
 
@@ -329,29 +333,41 @@ app.get("/api/bracket", async (req, res) => {
 ========================= */
 
 app.put("/api/bracket/vote", async (req, res) => {
-
   const { matchupIndex, choice } = req.body;
 
   try {
-
     const bracket = await Bracket.findOne();
-
     const matchup = bracket.matchups[matchupIndex];
 
-    const currentVotes = matchup.votes.get(choice) || 0;
+    if (!matchup || !matchup.pair.includes(choice)) {
+      return res.status(400).json({ error: "Invalid vote" });
+    }
 
+    // Get user IP (works in Azure)
+    const userIP =
+      req.headers["x-forwarded-for"]?.split(",")[0] ||
+      req.socket.remoteAddress;
+
+    // Prevent duplicate votes
+    if (matchup.voters.includes(userIP)) {
+      return res.status(403).json({ error: "You already voted" });
+    }
+
+    // Record vote
+    const currentVotes = matchup.votes.get(choice) || 0;
     matchup.votes.set(choice, currentVotes + 1);
+
+    // Save voter IP
+    matchup.voters.push(userIP);
 
     await bracket.save();
 
     res.json(bracket);
 
   } catch (err) {
-
+    console.error(err);
     res.status(500).json({ error: err.message });
-
   }
-
 });
 
 /* =========================
