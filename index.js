@@ -205,15 +205,17 @@ const Bracket = mongoose.model("Bracket", bracketSchema);
 const createMarchBracket = async () => {
 
   const items = [
-    "Nachos",
-    "Pizza",
-    "Popcorn",
-    "Pretzels",
-    "Wings",
-    "Chips & Salsa",
-    "Mozzarella Sticks",
-    "Sliders"
+    "Toy Story",
+    "Finding Nemo",
+    "Up",
+    "Inside Out",
+    "Coco",
+    "Monsters Inc",
+    "The Incredibles",
+    "Cars"
   ];
+
+
 
   const matchups = [];
 
@@ -232,7 +234,7 @@ const createMarchBracket = async () => {
   }
 
   const bracket = new Bracket({
-    topic: "Best March Madness Snacks",
+    topic: "Favorite Disney Movie",
     currentRound: 0,
     matchups,
     roundStart: new Date(),
