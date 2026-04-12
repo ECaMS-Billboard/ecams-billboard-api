@@ -203,7 +203,7 @@ const Bracket = mongoose.model("Bracket", bracketSchema);
 ========================= */
 
 const createMarchBracket = async () => {
-
+  // Edit entries here
   const items = [
     "Toy Story",
     "Finding Nemo",
@@ -373,6 +373,63 @@ app.put("/api/bracket/vote", async (req, res) => {
 });
 
 /* =========================
+   MANUAL ADVANCE ROUND
+========================= */
+app.post("/api/bracket/advance", async (req, res) => {
+  try {
+    const bracket = await Bracket.findOne();
+
+    if (!bracket) {
+      return res.status(404).json({ error: "No bracket found" });
+    }
+
+    const winners = bracket.matchups.map((m) => {
+      const [a, b] = m.pair;
+
+      const aVotes = m.votes.get(a) || 0;
+      const bVotes = m.votes.get(b) || 0;
+
+      return aVotes >= bVotes ? a : b;
+    });
+
+    // Tournament finished
+    if (winners.length === 1) {
+      bracket.tournamentEnded = true;
+      bracket.matchups = [{ pair: [winners[0]], votes: {} }];
+      await bracket.save();
+      return res.json(bracket);
+    }
+
+    // Build next round
+    const nextRound = [];
+
+    for (let i = 0; i < winners.length; i += 2) {
+      const pair = [winners[i], winners[i + 1]];
+
+      nextRound.push({
+        pair,
+        votes: {
+          [pair[0]]: 0,
+          [pair[1]]: 0
+        }
+      });
+    }
+
+    bracket.matchups = nextRound;
+    bracket.currentRound += 1;
+    bracket.roundStart = new Date();
+
+    await bracket.save();
+
+    res.json(bracket);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to advance round" });
+  }
+});
+
+/* =========================
    RESET BRACKET
 ========================= */
 
@@ -473,6 +530,12 @@ app.get('/users', isAuthenticated, (req, res) => {
 app.get('/admin', isAuthenticated, (req, res) => {
     res.sendFile(path.join(__dirname, 'static', 'layout.html'));
 });
+
+app.get('/bracket', isAuthenticated, (req, res) => {
+    res.sendFile(path.join(__dirname, 'static', 'bracket.html'));
+});
+
+
 
 
 // Configuration for file uploads

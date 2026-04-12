@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Monthly Bracket</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f8f9fa;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      text-align: center;
+      padding: 40px;
+    }
+
+    h1 {
+      color: #343a40;
+    }
+
+    .round {
+      margin: 30px 0;
+    }
+
+    .match {
+      background: #e9ecef;
+      margin: 10px auto;
+      padding: 15px;
+      border-radius: 8px;
+      width: 400px;
+    }
+
+    .winner {
+      font-weight: bold;
+      color: green;
+    }
+
+    button {
+      margin: 5px;
+      padding: 8px 12px;
+      border-radius: 5px;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+      color: white;
+    }
+
+    .top-buttons {
+      margin-bottom: 20px;
+    }
+
+    .danger {
+      background-color: #dc3545;
+      color: white;
+    }
+
+    .danger:hover {
+      background-color: #a71d2a;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>Monthly Bracket Manager</h1>
+
+    <div class="top-buttons">
+      <button onclick="loadBracket()">Refresh</button>
+      <button class="danger" onclick="resetBracket()">Reset Bracket</button>
+      <button onclick="advanceRound()">Advance Round</button>
+    </div>
+
+    <div id="bracket"></div>
+  </div>
+
+  <script>
+    async function loadBracket() {
+      try {
+        const res = await fetch('/api/bracket', { credentials: 'include' });
+        const data = await res.json();
+
+        renderBracket(data);
+      } catch (err) {
+        console.error('Failed to load bracket:', err);
+        document.getElementById('bracket').innerHTML = 'Failed to load bracket.';
+      }
+    }
+
+    function renderBracket(data) {
+        const container = document.getElementById('bracket');
+
+        if (!data.matchups || data.matchups.length === 0) {
+            container.innerHTML = 'No bracket data found.';
+            return;
+        }
+
+        let html = `<h2>${data.topic}</h2>`;
+        html += `<h3>Round ${data.currentRound + 1}</h3>`;
+
+        data.matchups.forEach((match, index) => {
+            const [team1, team2] = match.pair;
+
+            const votes1 = match.votes?.[team1] || 0;
+            const votes2 = match.votes?.[team2] || 0;
+
+            html += `
+            <div class="match">
+                <p>${team1} (${votes1})</p>
+                <p>${team2} (${votes2})</p>
+
+                <button onclick="vote(${index}, '${team1}')">
+                Vote ${team1}
+                </button>
+
+                <button onclick="vote(${index}, '${team2}')">
+                Vote ${team2}
+                </button>
+            </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    async function advanceWinner(matchId, winner) {
+      if (!confirm('Advance this winner?')) return;
+
+      try {
+        const res = await fetch('/api/bracket/advance', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify({ matchId, winner })
+        });
+
+        if (!res.ok) throw new Error('Failed to advance');
+
+        loadBracket();
+      } catch (err) {
+        console.error(err);
+        alert('Failed to advance winner.');
+      }
+    }
+
+    async function resetBracket() {
+        if (!confirm('Reset bracket?')) return;
+
+        await fetch('/api/bracket/reset', {
+            method: 'DELETE'
+        });
+
+        loadBracket();
+    }
+
+    async function vote(matchupIndex, choice) {
+        try {
+            const res = await fetch('/api/bracket/vote', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify({ matchupIndex, choice })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+            alert(data.error || 'Vote failed');
+            return;
+            }
+
+            renderBracket(data);
+
+        } catch (err) {
+            console.error(err);
+            alert('Vote failed');
+        }
+    }
+
+    async function advanceRound() {
+        if (!confirm("Advance to next round?")) return;
+
+        try {
+            const res = await fetch('/api/bracket/advance', {
+            method: 'POST'
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+            alert(data.error || "Failed to advance");
+            return;
+            }
+
+            renderBracket(data);
+
+        } catch (err) {
+            console.error(err);
+            alert("Failed to advance round");
+        }
+    }
+
+    // Initial load
+    loadBracket();
+  </script>
+</body>
+</html>

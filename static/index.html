@@ -162,6 +162,7 @@
     <button onclick="window.location.href='/users'" style="display: none;" id="allowedEmailsButton">Users</button>
     <button onclick="window.location.href='/logout'" class="sidebar-logout" id="mobileLogoutButton">Logout</button>
     <button onclick="window.location.href='/admin'" style="display: none;" id="adminButton">Admin Panel</button>
+    <button onclick="window.location.href='/bracket'" style="display: none;" id="bracketButton">Monthly Bracket</button>
   </div>
 
   <!-- Main Content -->
@@ -180,6 +181,7 @@
           document.getElementById('slidesButton').style.display = 'inline-block';
           document.getElementById('allowedEmailsButton').style.display = 'inline-block';
           document.getElementById('googleLoginButton').style.display = 'none';
+          document.getElementById('bracketButton').style.display = 'inline-block';
 
           if (window.innerWidth <= 768) {
             document.getElementById('mobileLogoutButton').style.display = 'block';
