@@ -5,62 +5,135 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Slides List</title>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
-        .container { text-align: center; padding: 50px; }
-        h1 { color: #343a40; }
-        ul { list-style-type: none; padding: 0; }
-        li { background-color: #e9ecef; margin: 5px 0; padding: 10px; border-radius: 5px; }
-        img { max-width: 300px; height: auto; }
-        form { margin-bottom: 20px; }
-        input, button { margin: 5px; padding: 5px; border-radius: 5px; border: 1px solid #ced4da; }
-        button { cursor: pointer; transition: background-color 0.3s; }
-        button:hover { background-color: #0056b3; color: white; }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            text-align: center;
+            padding: 50px;
+        }
+
+        h1 {
+            color: #343a40;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            background-color: #e9ecef;
+            margin: 5px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        img {
+            max-width: 300px;
+            height: auto;
+        }
+
+        form {
+            margin-bottom: 20px;
+        }
+
+        input, button {
+            margin: 5px;
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ced4da;
+        }
+
+        button {
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+            color: white;
+        }
+
+        #upload-message {
+            margin-top: 10px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Slides</h1>
         <button onclick="window.location.href='/'">Back</button>
+
         <form id="add-slide-form" enctype="multipart/form-data">
-            <input type="file" id="slide-file" accept="image/*" required>
+            <input
+                type="email"
+                id="submitter-email"
+                placeholder="Enter your email"
+                required
+            >
+            <input
+                type="file"
+                id="slide-file"
+                accept="image/*"
+                required
+            >
             <button type="submit">Add Slide</button>
         </form>
+
+        <p id="upload-message"></p>
+
         <div id="slides-data"></div>
     </div>
+
     <script>
-        // Function to fetch all slides
         function fetchSlides() {
             fetch('/list-images')
                 .then(response => response.json())
                 .then(data => {
                     const slidesDiv = document.getElementById('slides-data');
                     let html = '<ul>';
+
                     data.forEach(slide => {
                         html += `<li>
                                     <img src="/image/${slide.fileId}" alt="${slide.filename}">
                                     <p>${slide.filename}</p>
                                     <p>Department: <span id="department-${slide.fileId}">${slide.department}</span></p>
                                     <p>Status: ${slide.approved ? 'Approved' : 'Pending'}</p>
+                                    <p>Uploaded by: ${slide.email ? slide.email : 'N/A'}</p>
+                                    <p>Approved by: ${slide.approvedBy ? slide.approvedBy : 'N/A'}</p>
                                     <button onclick="changeDepartment('${slide.fileId}')">Change Department</button>
                                     <button onclick="approveSlide('${slide.fileId}')">Approve</button>
                                     <button onclick="declineSlide('${slide.fileId}')">Decline</button>
                                     <button onclick="deleteSlide('${slide.fileId}')">Delete</button>
                                  </li>`;
                     });
+
                     html += '</ul>';
                     slidesDiv.innerHTML = html;
                 })
                 .catch(err => {
                     console.error('Failed to fetch slides:', err);
-                    document.getElementById('slides-data').innerHTML = 'Failed to fetch slides. Please try again later.';
+                    document.getElementById('slides-data').innerHTML =
+                        'Failed to fetch slides. Please try again later.';
                 });
         }
 
-        // Function to handle adding a slide
         document.getElementById('add-slide-form').addEventListener('submit', function(event) {
             event.preventDefault();
+
+            const uploadMessage = document.getElementById('upload-message');
+            const email = document.getElementById('submitter-email').value;
+            const file = document.getElementById('slide-file').files[0];
+
             const formData = new FormData();
-            formData.append('file', document.getElementById('slide-file').files[0]);
+            formData.append('file', file);
+            formData.append('email', email);
 
             fetch('/upload', {
                 method: 'POST',
@@ -70,27 +143,38 @@
             .then(() => {
                 fetchSlides();
                 document.getElementById('add-slide-form').reset();
+                uploadMessage.innerText = 'Poster submitted successfully. It is now pending approval.';
             })
             .catch(err => {
                 console.error('Failed to upload slide:', err);
+                uploadMessage.innerText = 'Upload failed. Please try again.';
             });
         });
 
-        // Function to approve a slide
         function approveSlide(id) {
-            fetch(`/approve-slide/${id}`, { method: 'PUT' })
-                .then(() => fetchSlides())
-                .catch(err => console.error('Failed to approve slide:', err));
+            const approverName = prompt('Enter your name:');
+
+            if (!approverName) {
+                return;
+            }
+
+            fetch(`/approve-slide/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ approvedBy: approverName })
+            })
+            .then(() => fetchSlides())
+            .catch(err => console.error('Failed to approve slide:', err));
         }
 
-        // Function to decline a slide
         function declineSlide(id) {
             fetch(`/decline-slide/${id}`, { method: 'PUT' })
                 .then(() => fetchSlides())
                 .catch(err => console.error('Failed to decline slide:', err));
         }
 
-        // Function to delete a slide
         function deleteSlide(id) {
             if (confirm('Are you sure you want to delete this slide?')) {
                 fetch(`/delete-slide/${id}`, {
@@ -116,7 +200,7 @@
                     body: JSON.stringify({ department: newDepartment }),
                 })
                 .then(() => {
-                    document.getElementById(`department-${id}`).innerText = newDepartment; // Update the displayed department
+                    document.getElementById(`department-${id}`).innerText = newDepartment;
                 })
                 .catch(err => {
                     console.error('Failed to change department:', err);
@@ -124,8 +208,6 @@
             }
         }
 
-
-        // Initial fetch of slides
         fetchSlides();
     </script>
 </body>
