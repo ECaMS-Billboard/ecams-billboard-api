@@ -1060,12 +1060,18 @@ app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
 
 // This is for approving slides
 app.put('/approve-slide/:id', isAuthenticated, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const slide = await db.collection('Slides').updateOne(
-            { fileId: new mongoose.Types.ObjectId(id) },
-            { $set: { approved: true } }
-        );
+  try {
+      const { id } = req.params;
+      const { approvedBy = '' } = req.body;
+
+      const slide = await db.collection('Slides').updateOne(
+          { fileId: new mongoose.Types.ObjectId(id) },
+          { $set: { approved: true, approvedBy: approvedBy } }
+      );
+
+      if (!slide.matchedCount) {
+          return res.status(404).json({ error: 'Slide not found' });
+      }
 
         if (!slide.matchedCount) {
             return res.status(404).json({ error: 'Slide not found' });
