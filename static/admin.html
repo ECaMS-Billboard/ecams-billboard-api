@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ECaMS • Admin</title>
+  <style>
+    :root{--lu-red:#b11010;--lu-red-dark:#920d0d;--ink:#111315;}
+    *{box-sizing:border-box}
+    body{margin:0;background:#f6f7f9;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    .sidebar{position:fixed;inset:0 auto 0 0;width:260px;background:#1e1e1e;color:#fff;padding:20px 16px;box-shadow:2px 0 20px rgba(0,0,0,.25)}
+    .sidebar h2{margin:6px 0 16px}
+    .nav-btn{width:100%;text-align:left;padding:14px;border:1px solid #2b3036;background:#0f1720;color:#e5e7eb;border-radius:12px;cursor:pointer;margin:10px 0}
+    .nav-btn:hover{border-color:#3b424a}
+    .nav-btn.active{border-color:var(--lu-red);box-shadow:0 0 0 3px rgba(177,16,16,.3)}
+    .container{margin-left:280px;padding:32px 36px;max-width:1100px}
+    .page-title{color:var(--lu-red);margin:0 0 18px}
+    .card{background:#fff;border:1px solid #e6e7ea;border-radius:16px;padding:22px;box-shadow:0 6px 18px rgba(16,24,40,.06)}
+    .subtle{color:#6b7280}
+    .pill{display:inline-flex;gap:8px;align-items:center;padding:8px 12px;border-radius:999px;border:1px solid;font-weight:600}
+    .pill.ok{color:#0b3d0e;background:#e9f6ea;border-color:#cfead1}
+    .pill.off{color:#5d1010;background:#fdecec;border-color:#f5c8c8}
+    .switch{display:inline-flex;gap:12px;align-items:center;border:none;border-radius:14px;padding:10px 14px;color:#fff;
+      background:linear-gradient(90deg,var(--lu-red) 0%,#000 100%);cursor:pointer}
+    .thumb{width:42px;height:22px;border-radius:999px;background:#111;position:relative;border:1px solid rgba(255,255,255,.25)}
+    .dot{position:absolute;top:50%;left:3px;transform:translateY(-50%);width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s}
+    .switch.on .dot{transform:translate(21px,-50%)}
+    .toast{position:fixed;right:22px;bottom:22px;background:#111;color:#fff;padding:12px 14px;border-radius:10px;opacity:0;transform:translateY(8px);transition:.2s}
+    .toast.show{opacity:1;transform:translateY(0)}
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <h2>ECAMS API</h2>
+    <button class="nav-btn" onclick="location.href='/'">Home</button>
+    <button class="nav-btn" onclick="location.href='/professors'">Professors</button>
+    <button class="nav-btn" onclick="location.href='/slides'">Slides</button>
+    <button class="nav-btn" onclick="location.href='/users'">Users</button>
+    <button class="nav-btn active" onclick="location.href='/admin'">Admin Panel</button>
+    <button class="nav-btn" onclick="location.href='/logout'">Logout</button>
+  </aside>
+
+  <main class="container">
+    <h1 class="page-title">Admin Panel</h1>
+
+    <section class="card">
+      <h3>Flyer Submission Control</h3>
+      <p class="subtle">Enable or disable public flyer uploads. This takes effect immediately.</p>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <span id="flyer-pill" class="pill off">Loading status…</span>
+        <button id="toggle-submissions" class="switch">
+          <span class="thumb"><span class="dot"></span></span>
+          <span id="switch-label">Toggle Submissions</span>
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const pill = document.getElementById('flyer-pill');
+    const btn = document.getElementById('toggle-submissions');
+    const label = document.getElementById('switch-label');
+    const toast = document.getElementById('toast');
+
+    function showToast(msg){ toast.textContent = msg; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'), 1800); }
+    function setUI(enabled){
+      if(enabled){ pill.className='pill ok'; pill.textContent='Submissions ENABLED'; btn.classList.add('on'); label.textContent='Disable'; }
+      else{ pill.className='pill off'; pill.textContent='Submissions DISABLED'; btn.classList.remove('on'); label.textContent='Enable'; }
+    }
+
+    async function loadStatus(){
+      try{
+        const r = await fetch('/api/admin/submissions/enabled', { credentials:'include' });
+        const d = await r.json();
+        if(typeof d.submissionsEnabled==='boolean'){ setUI(d.submissionsEnabled); }
+        else { pill.className='pill off'; pill.textContent='Unable to fetch status.'; }
+      }catch{ pill.className='pill off'; pill.textContent='Unable to fetch status.'; }
+    }
+
+    btn.addEventListener('click', async ()=>{
+      try{
+        btn.disabled = true;
+        const currentlyEnabled = pill.textContent.includes('ENABLED');
+        const r = await fetch('/api/admin/submissions/enabled', {
+          method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include',
+          body: JSON.stringify({ enabled: !currentlyEnabled })
+        });
+        if(!r.ok){ showToast('Failed to update'); return; }
+        const d = await r.json();
+        setUI(d.submissionsEnabled);
+        showToast(d.submissionsEnabled ? 'Uploads enabled' : 'Uploads disabled');
+      }catch{ showToast('Network error'); }
+      finally{ btn.disabled = false; }
+    });
+
+    loadStatus();
+  </script>
+</body>
+</html>

@@ -10,25 +10,24 @@ Although with that being said, this input sanitisation is still incomplete.
 
 VULNERABILITIES: (From what I know of)
 
-1. No magic number detection (first hex characters in a file that determine the file type)
+1. No tracking of who uploads what or any timestamps
 
-2. Can be really easily spoofed by just doing filename.jpg.php or something similar
-
-3. No tracking of who uploads what or any timestamps
-
-4. Anyone can upload infinite times
-
-This doesn't implement magic numbers
+2. Anyone can upload infinite times
  */
+
+import express from 'express';
+import multer from 'multer';
+import { Readable } from 'stream';
+import crypto from 'crypto';
+
+const router = express.Router();
 
 const express = require('express');
 const multer = require('multer');
 const { Readable } = require('stream');
 const router = express.Router();
 
-// -------------------------------------------------------------
 // Multer setup — store files in memory and validate on upload
-// -------------------------------------------------------------
 const storage = multer.memoryStorage();
 
 const upload = multer({
@@ -50,11 +49,44 @@ const upload = multer({
   },
 });
 
-router.post('/', (req, res, next) => {
-  console.log('--- Upload request received ---');
-  console.log('Body:', req.body);
-  console.log('Headers:', req.headers);
-  console.log('File present before multer?', req.file);
+function validateMagicNumber(req, res, next) {
+  if (!req.file || !req.file.buffer || req.file.buffer.length < 4) {
+    return res.status(400).json({ error: 'No file uploaded or file too small.' });
+  }
+
+  const buf = req.file.buffer;
+  const b0 = buf[0], b1 = buf[1], b2 = buf[2], b3 = buf[3];
+
+  // PNG signature: 0x89 0x50 0x4E 0x47
+  const isPNG = b0 === 0x89 && b1 === 0x50 && b2 === 0x4e && b3 === 0x47;
+
+  // JPEG signature: 0xFF 0xD8 0xFF (first three bytes)
+  const isJPG = b0 === 0xff && b1 === 0xd8 && b2 === 0xff;
+
+  if (!isPNG && !isJPG) {
+    return res.status(400).json({ error: 'Invalid file signature (not a real PNG/JPEG).' });
+  }
+
+  // attach detected ext/mime for downstream
+  req.detectedExt = isPNG ? '.png' : '.jpg';
+  req.detectedMime = isPNG ? 'image/png' : 'image/jpeg';
+
+  next();
+}
+
+function sanitizeFilename(originalName = '') {
+  // Replace anything not alnum, dot, underscore, hyphen with underscore
+  return String(originalName).replace(/[^\w.\-]/g, '_');
+}
+
+router.post(
+  '/',
+  checkSubmissionsEnabled,
+  (req, res, next) => {
+    console.log('--- Upload request received ---');
+    console.log('Body:', req.body);
+    console.log('Headers:', req.headers);
+    console.log('File present before multer?', req.file);
 
   upload.single('file')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
@@ -138,11 +170,14 @@ router.post('/', (req, res, next) => {
       res.status(500).json({ error: 'Failed to upload image.', details: err.message });
     });
 
-  } catch (err) {
-    console.error('Unexpected error in upload route:', err);
-    res.status(500).json({ error: 'Unexpected server error.', details: err.message });
-    console.error('GridFS upload stream failed:', err);
+      uploadStream.on('error', (err) => {
+        console.error('Upload failed:', err);
+        res.status(500).json({ error: 'Failed to upload image', details: err.message });
+      });
+    } catch (err) {
+      console.error('Unexpected error in upload route:', err);
+      res.status(500).json({ error: 'Unexpected server error.', details: err.message });
+    }
   }
-});
-
-module.exports = router;
+);
+export default router;

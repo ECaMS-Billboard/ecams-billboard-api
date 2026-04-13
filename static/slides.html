@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -65,9 +66,11 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>Slides</h1>
+        <p id="submissions-status" style="margin: 8px 0 20px; color:#b11010; font-weight:bold;"></p>
         <button onclick="window.location.href='/'">Back</button>
 
         <form id="add-slide-form" enctype="multipart/form-data">
@@ -93,10 +96,14 @@
 
     <script>
         function fetchSlides() {
-            fetch('/list-images')
+            fetch('/list-images', { credentials: 'include' })
                 .then(response => response.json())
                 .then(data => {
                     const slidesDiv = document.getElementById('slides-data');
+                    if (!Array.isArray(data)) {
+                        slidesDiv.textContent = typeof data === 'string' ? data : 'No images found.';
+                        return;
+                    }
                     let html = '<ul>';
 
                     data.forEach(slide => {
@@ -110,7 +117,7 @@
                                     <button onclick="changeDepartment('${slide.fileId}')">Change Department</button>
                                     <button onclick="approveSlide('${slide.fileId}')">Approve</button>
                                     <button onclick="declineSlide('${slide.fileId}')">Decline</button>
-                                    <button onclick="deleteSlide('${slide.fileId}')">Delete</button>
+                                    <button onclick="deleteSlide('${slide.fileId}')">Archive</button>
                                  </li>`;
                     });
 
@@ -123,6 +130,12 @@
                         'Failed to fetch slides. Please try again later.';
                 });
         }
+        
+        function fetchArchivedSlides() {
+            fetch('/list-archived', { credentials: 'include' })
+                .then(response => response.json())
+                .then(data => {
+                    const slidesDiv = document.getElementById('slides-data');
 
         document.getElementById('add-slide-form').addEventListener('submit', function(event) {
             event.preventDefault();
@@ -135,13 +148,55 @@
             formData.append('file', file);
             formData.append('email', email);
 
-            fetch('/upload', {
+        function restoreSlide(id) {
+            if (!confirm('Restore this slide?')) return;
+
+            fetch(`/restore-slide/${id}`, {
                 method: 'POST',
-                body: formData
+                credentials: 'include'
             })
-            .then(response => response.json())
-            .then(() => {
-                fetchSlides();
+            .then(() => fetchArchivedSlides())
+            .catch(err => console.error('Failed to restore slide:', err));
+        }
+
+        // === Upload handler ===
+        document.getElementById('add-slide-form').addEventListener('submit', async function (event) {
+            event.preventDefault();
+
+            if (!submissionsEnabled) {
+                alert('Uploads are currently disabled by an administrator.');
+                return;
+            }
+
+            const file = document.getElementById('slide-file').files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'include'
+                });
+
+                // Expect 201 when enabled; 503 when disabled
+                if (res.status === 503) {
+                    const body = await res.json().catch(() => ({}));
+                    alert(body?.error || 'Uploads are disabled.');
+                    // Ensure UI matches server truth in case it changed since page load
+                    await refreshUploadToggleStatus();
+                    return;
+                }
+
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body?.error || `Upload failed: ${res.status}`);
+                }
+
+                // Success
+                await fetchSlides();
                 document.getElementById('add-slide-form').reset();
                 uploadMessage.innerText = 'Poster submitted successfully. It is now pending approval.';
             })
@@ -170,23 +225,33 @@
         }
 
         function declineSlide(id) {
-            fetch(`/decline-slide/${id}`, { method: 'PUT' })
+            fetch(`/decline-slide/${id}`, { method: 'PUT', credentials: 'include' })
                 .then(() => fetchSlides())
                 .catch(err => console.error('Failed to decline slide:', err));
         }
 
         function deleteSlide(id) {
-            if (confirm('Are you sure you want to delete this slide?')) {
-                fetch(`/delete-slide/${id}`, {
-                    method: 'DELETE'
-                })
-                .then(() => {
-                    fetchSlides();
-                })
-                .catch(err => {
-                    console.error('Failed to delete slide:', err);
-                });
-            }
+            if (!confirm('Are you sure you want to archive this slide?')) return;
+
+            fetch(`/delete-slide/${id}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Archive failed');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log(data.message);
+                // ✅ Only refresh AFTER server confirms deletion
+                fetchSlides();
+            })
+            .catch(err => {
+                console.error('Failed to archive slide:', err);
+                alert('Failed to archive slide.');
+            });
         }
 
         function changeDepartment(id) {
@@ -194,9 +259,8 @@
             if (newDepartment) {
                 fetch(`/edit-department/${id}`, {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify({ department: newDepartment }),
                 })
                 .then(() => {

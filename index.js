@@ -1,25 +1,39 @@
-const express = require('express');
-const cors = require('cors'); // Import CORS
-const mongoose = require('mongoose');
-const path = require('path');
-const multer = require('multer'); // For GridFS
-const { Readable } = require('stream');
-const session = require('express-session'); // Import express-session
-const passport = require('passport'); // Import passport
-const GoogleStrategy = require('passport-google-oauth20').Strategy; // Import Google OAuth strategy
+import dotenv from 'dotenv';
+
+import express from 'express';
+import cors from 'cors';
+import mongoose from 'mongoose';
+import path from 'path';
+import multer from 'multer';
+import { fileURLToPath } from 'url';   
+import session from 'express-session';
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import fs from 'fs';
+import { Readable } from 'stream';
+import cron from 'node-cron';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables from .env file (if it exists), otherwise rely on environment variables (e.g. in Azure)
+const envPath = path.join(__dirname, '.env'); 
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+} else {
+  dotenv.config(); // Azure will use environment variables
+}
 
 // Create Express application
 const app = express();
 const port = process.env.PORT || 3000;
-app.use(cors()); // Allow CORS
+app.use(cors()); // Allow CORS 
 
 // Use files from the static folder
 app.use(express.static(path.join(__dirname, 'static')));
 
 // Include JSON middleware (for /login)
 app.use(express.json());
-
-require('dotenv').config();
 
 // Session setup for authentication
 app.use(session({
@@ -30,6 +44,83 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Flyer submissions feature flag (file-backed)
+const FLAG_FILE = path.join(__dirname, 'feature-flags.json');
+
+function ensureFlagFile() {
+    if (!fs.existsSync(FLAG_FILE)) {
+        fs.writeFileSync(
+            FLAG_FILE,
+            JSON.stringify({ submissionsEnabled: true }, null, 2)
+        );
+    }
+}
+
+function getSubmissionsEnabled() {
+    try {
+        ensureFlagFile();
+        const data = JSON.parse(fs.readFileSync(FLAG_FILE, 'utf-8'));
+        return !!data.submissionsEnabled;
+    } catch {
+        return true; // fail-open if unreadable
+    }
+}
+
+function setSubmissionsEnabled(enabled) {
+    ensureFlagFile();
+    fs.writeFileSync(
+        FLAG_FILE,
+        JSON.stringify({ submissionsEnabled: !!enabled }, null, 2)
+    );
+    return !!enabled;
+}
+
+// Expose for routers (EX: routes/upload.js)
+app.locals.getSubmissionsEnabled = getSubmissionsEnabled;
+app.locals.setSubmissionsEnabled = setSubmissionsEnabled;
+
+
+// redirected to routes/upload.js
+import uploadRoutes from './routes/upload.js';
+app.use('/upload', uploadRoutes);
+
+// redirects to routes/auth.js
+import authRoutes from './routes/auth.js';
+app.use('/', authRoutes);
+
+
+// Middleware to protect routes
+function isAuthenticated(req, res, next) {
+    if (req.isAuthenticated && req.isAuthenticated()) {
+        return next();
+    }
+    return res.redirect('/auth/google');
+}
+
+// === Admin API to read/update the flag ===
+app.get('/api/admin/submissions/enabled', isAuthenticated, (req, res) => {
+    try {
+        res.json({ submissionsEnabled: getSubmissionsEnabled() });
+    } catch (e) {
+        console.error('Read flag failed:', e);
+        res.status(500).json({ error: 'Unable to read feature flag' });
+    }
+});
+
+app.put('/api/admin/submissions/enabled', isAuthenticated, (req, res) => {
+    try {
+        const { enabled } = req.body;
+        if (typeof enabled !== 'boolean') {
+            return res.status(400).json({ error: '`enabled` must be boolean' });
+        }
+        const updated = setSubmissionsEnabled(enabled);
+        res.json({ submissionsEnabled: updated });
+    } catch (e) {
+        console.error('Write flag failed:', e);
+        res.status(500).json({ error: 'Unable to update feature flag' });
+    }
+});
+
 // MongoURI - Ensure to use an environment variable for better security in production
 const MONGO_URI = process.env.MONGO_URI;
 
@@ -37,24 +128,24 @@ const MONGO_URI = process.env.MONGO_URI;
 mongoose.connect(MONGO_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
-  });
-  
-  const db = mongoose.connection.useDb('EcamsBB');
-  
-  // MongoDB model for the professor data
+});
+
+const db = mongoose.connection.useDb('EcamsBB');
+
+// MongoDB model for the professor data
 const User = db.model(
-  'User',
-  new mongoose.Schema({
-      fname: String,
-      lname: String,
-      email: String,
-      dept: String,
-      office: String,
-      num_ratings: { type: Number, default: 0 },
-      overall_rating: { type: String, default: '0' },
-      image: String, // New field for image
-  }),
-  'Professors'
+    'User',
+    new mongoose.Schema({
+        fname: String,
+        lname: String,
+        email: String,
+        dept: String,
+        office: String,
+        num_ratings: { type: Number, default: 0 },
+        overall_rating: { type: String, default: '0' },
+        image: String, // New field for image
+    }),
+    'Professors'
 );
 
 // This allows users to be added for mongo
@@ -66,6 +157,217 @@ const AllowedEmail = db.model(
     'AllowedEmails'
 );
 
+
+
+const matchupSchema = new mongoose.Schema({
+  pair: [String],
+  votes: {
+    type: Map,
+    of: Number,
+    default: {}
+  }
+});
+
+const bracketSchema = new mongoose.Schema({
+  topic: String,
+  currentRound: {
+    type: Number,
+    default: 0
+  },
+  matchups: [matchupSchema],
+  roundStart: {
+    type: Date,
+    default: Date.now
+  },
+  tournamentEnded: {
+    type: Boolean,
+    default: false
+  }
+});
+
+const Bracket = mongoose.model("Bracket", bracketSchema);
+
+/* =========================
+   CREATE MARCH BRACKET
+========================= */
+
+const createMarchBracket = async () => {
+
+  const items = [
+    "Nachos",
+    "Pizza",
+    "Popcorn",
+    "Pretzels",
+    "Wings",
+    "Chips & Salsa",
+    "Mozzarella Sticks",
+    "Sliders"
+  ];
+
+  const matchups = [];
+
+  for (let i = 0; i < items.length; i += 2) {
+
+    const pair = [items[i], items[i + 1]];
+
+    matchups.push({
+      pair,
+      votes: {
+        [pair[0]]: 0,
+        [pair[1]]: 0
+      }
+    });
+
+  }
+
+  const bracket = new Bracket({
+    topic: "Best March Madness Snacks",
+    currentRound: 0,
+    matchups,
+    roundStart: new Date(),
+    tournamentEnded: false
+  });
+
+  await bracket.save();
+
+  return bracket;
+};
+
+/* =========================
+   AUTO ADVANCE ROUND
+========================= */
+
+const advanceRoundIfNeeded = async (bracket) => {
+
+  const now = new Date();
+  const week = 7 * 24 * 60 * 60 * 1000;
+
+  if (now - bracket.roundStart < week) return bracket;
+
+  const winners = bracket.matchups.map((m) => {
+
+    const [a, b] = m.pair;
+
+    const aVotes = m.votes.get(a) || 0;
+    const bVotes = m.votes.get(b) || 0;
+
+    return aVotes >= bVotes ? a : b;
+
+  });
+
+  if (winners.length === 1) {
+
+    bracket.tournamentEnded = true;
+    bracket.matchups = [{ pair: [winners[0]], votes: {} }];
+
+    await bracket.save();
+    return bracket;
+
+  }
+
+  const nextRound = [];
+
+  for (let i = 0; i < winners.length; i += 2) {
+
+    const pair = [winners[i], winners[i + 1]];
+
+    nextRound.push({
+      pair,
+      votes: {
+        [pair[0]]: 0,
+        [pair[1]]: 0
+      }
+    });
+
+  }
+
+  bracket.matchups = nextRound;
+  bracket.currentRound += 1;
+  bracket.roundStart = new Date();
+
+  await bracket.save();
+
+  return bracket;
+
+};
+
+/* =========================
+   GET BRACKET
+========================= */
+
+app.get("/api/bracket", async (req, res) => {
+
+  try {
+
+    let bracket = await Bracket.findOne();
+
+    if (!bracket) {
+      bracket = await createMarchBracket();
+    }
+
+    bracket = await advanceRoundIfNeeded(bracket);
+
+    res.json(bracket);
+
+  } catch (err) {
+
+    res.status(500).json({ error: err.message });
+
+  }
+
+});
+
+/* =========================
+   VOTE
+========================= */
+
+app.put("/api/bracket/vote", async (req, res) => {
+
+  const { matchupIndex, choice } = req.body;
+
+  try {
+
+    const bracket = await Bracket.findOne();
+
+    const matchup = bracket.matchups[matchupIndex];
+
+    const currentVotes = matchup.votes.get(choice) || 0;
+
+    matchup.votes.set(choice, currentVotes + 1);
+
+    await bracket.save();
+
+    res.json(bracket);
+
+  } catch (err) {
+
+    res.status(500).json({ error: err.message });
+
+  }
+
+});
+
+/* =========================
+   RESET BRACKET
+========================= */
+
+app.delete("/api/bracket/reset", async (req, res) => {
+
+  await Bracket.deleteMany();
+
+  res.json({ message: "Bracket reset for March" });
+
+});
+
+/* =========================
+   SERVER
+========================= */
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 // Authentication code
 // Passport configuration
 passport.use(new GoogleStrategy({
@@ -73,17 +375,17 @@ passport.use(new GoogleStrategy({
     clientSecret: process.env.CLIENT_SECRET,
     callbackURL: "/auth/google/callback"
 },
-async (accessToken, refreshToken, profile, done) => {
-    const userEmail = profile.emails[0].value; // Get the user's email
+    async (accessToken, refreshToken, profile, done) => {
+        const userEmail = profile.emails[0].value; // Get the user's email
 
-    // Check if the user is allowed
-    const allowedUser = await AllowedEmail.findOne({ email: userEmail });
-    if (allowedUser) {
-        return done(null, profile); // User is allowed
-    } else {
-        return done(null, false, { message: 'Unauthorized user' }); // User is not allowed
-    }
-}));
+        // Check if the user is allowed
+        const allowedUser = await AllowedEmail.findOne({ email: userEmail });
+        if (allowedUser) {
+            return done(null, profile); // User is allowed
+        } else {
+            return done(null, false, { message: 'Unauthorized user' }); // User is not allowed
+        }
+    }));
 
 passport.serializeUser((user, done) => {
     done(null, user);
@@ -93,12 +395,12 @@ passport.deserializeUser((user, done) => {
     done(null, user);
 });
 
-// Authentication routes
+/* Authentication routes THIS STUFF HAS BEEN MOVED TO /routes/auth.js
 app.get('/auth/google', passport.authenticate('google', {
     scope: ['profile', 'email']
 }));
 
-app.get('/auth/google/callback', 
+app.get('/auth/google/callback',
     passport.authenticate('google', { failureRedirect: '/' }),
     (req, res) => {
         if (req.user) {
@@ -120,39 +422,36 @@ app.get('/logout', (req, res) => {
     });
 });
 
-// Middleware to protect routes
-function isAuthenticated(req, res, next) {
-    if (req.isAuthenticated()) {
-        return next();
-    }
-    res.redirect('/auth/google'); // Redirect to Google login if not authenticated
-}
-
 // Check authentication status
 app.get('/api/check-auth', (req, res) => {
     if (req.isAuthenticated()) {
         return res.status(200).json({ authenticated: true });
     }
     res.status(401).json({ authenticated: false });
-});
+});*/
 
 // Home page route
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'static', 'index.html'));
+    res.sendFile(path.join(__dirname, 'static', 'index.html'));
 });
 
 // Professors page route
 app.get('/professors', isAuthenticated, (req, res) => {
-  res.sendFile(path.join(__dirname, 'static', 'professors.html'));
+    res.sendFile(path.join(__dirname, 'static', 'professors.html'));
 });
 
 // Slides page route
 app.get('/slides', isAuthenticated, (req, res) => {
-  res.sendFile(path.join(__dirname, 'static', 'slides.html'));
+    res.sendFile(path.join(__dirname, 'static', 'slides.html'));
 });
 
 app.get('/users', isAuthenticated, (req, res) => {
     res.sendFile(path.join(__dirname, 'static', 'users.html'));
+});
+
+// Admin dashboard route (for layout.html)
+app.get('/admin', isAuthenticated, (req, res) => {
+    res.sendFile(path.join(__dirname, 'static', 'layout.html'));
 });
 
 
@@ -210,54 +509,54 @@ function handleUploadError(err, _req, res, next) {
 }
 
 // Route to upload a professor with an image
-app.post('/add-professor', isAuthenticated, uploadProfessorImage.single('image'),handleUploadError, async (req, res) => {  //before upload.single('image'), now using limit 
-  try {
-      const { fname, lname, email, dept, office } = req.body;
+app.post('/add-professor', isAuthenticated, uploadProfessorImage.single('image'), handleUploadError, async (req, res) => {  //before upload.single('image'), now using limit 
+    try {
+        const { fname, lname, email, dept, office } = req.body;
 
-      // Create a readable stream from the uploaded file
-      const readableStream = new Readable();
-      readableStream.push(req.file.buffer);
-      readableStream.push(null);
+        // Create a readable stream from the uploaded file
+        const readableStream = new Readable();
+        readableStream.push(req.file.buffer);
+        readableStream.push(null);
 
-      // Upload the image to GridFS
-      const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
-          contentType: req.file.mimetype,
-      });
+        // Upload the image to GridFS
+        const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
+            contentType: req.file.mimetype,
+        });
 
-      readableStream.pipe(uploadStream);
+        readableStream.pipe(uploadStream);
 
-      uploadStream.on('finish', async () => {
-          const file = await db.collection('slides.files').findOne({ filename: req.file.originalname });
+        uploadStream.on('finish', async () => {
+            const file = await db.collection('slides.files').findOne({ filename: req.file.originalname });
 
-          if (!file) {
-              return res.status(500).json({ error: 'Image upload failed' });
-          }
+            if (!file) {
+                return res.status(500).json({ error: 'Image upload failed' });
+            }
 
-          // Create a new professor with the image fileId
-          const newProfessor = new User({
-              fname,
-              lname,
-              email,
-              dept,
-              office,
-              image: file._id, // Save the image fileId
-          });
-          await newProfessor.save();
-          res.status(201).json({ message: 'Professor added successfully' });
-      });
+            // Create a new professor with the image fileId
+            const newProfessor = new User({
+                fname,
+                lname,
+                email,
+                dept,
+                office,
+                image: file._id, // Save the image fileId
+            });
+            await newProfessor.save();
+            res.status(201).json({ message: 'Professor added successfully' });
+        });
 
-      uploadStream.on('error', (err) => {
-          console.error('Upload failed:', err);
-          res.status(500).json({ error: 'Failed to upload image', details: err });
-      });
-  } catch (err) {
-      console.error('Failed to add professor:', err);
-      res.status(500).json({ error: 'Failed to add professor' });
-  }
+        uploadStream.on('error', (err) => {
+            console.error('Upload failed:', err);
+            res.status(500).json({ error: 'Failed to upload image', details: err });
+        });
+    } catch (err) {
+        console.error('Failed to add professor:', err);
+        res.status(500).json({ error: 'Failed to add professor' });
+    }
 });
 
 // Route to edit the professor info
-app.put('/edit-professor/:id', isAuthenticated, uploadProfessorImage.single('image'),handleUploadError, async (req, res) => {  //change in uploading from upload.single('image') to limit
+app.put('/edit-professor/:id', isAuthenticated, uploadProfessorImage.single('image'), handleUploadError, async (req, res) => {  //change in uploading from upload.single('image') to limit
     try {
         const { fname, lname, email, dept, office } = req.body;
         const updateData = { fname, lname, email, dept, office };
@@ -312,85 +611,81 @@ app.put('/edit-professor/:id', isAuthenticated, uploadProfessorImage.single('ima
 
 // Route to delete professor info
 app.delete('/delete-professor/:id', isAuthenticated, async (req, res) => {
-  try {
-      const professor = await User.findByIdAndDelete(req.params.id);
-      if (!professor) {
-          return res.status(404).json({ error: 'Professor not found' });
-      }
-      res.json({ message: 'Professor deleted successfully' });
-  } catch (err) {
-      console.error('Failed to delete professor:', err);
-      res.status(500).json({ error: 'Failed to delete professor' });
-  }
+    try {
+        const professor = await User.findByIdAndDelete(req.params.id);
+        if (!professor) {
+            return res.status(404).json({ error: 'Professor not found' });
+        }
+        res.json({ message: 'Professor deleted successfully' });
+    } catch (err) {
+        console.error('Failed to delete professor:', err);
+        res.status(500).json({ error: 'Failed to delete professor' });
+    }
 });
 //format for azure blob pictures name convention
 function formatImageName(fname, lname) {
-  return `${fname}_${lname}`
-    .toLowerCase()
-    .replace(/\s+/g, "_")     
-    .replace(/[^a-z0-9_]/g, ""); 
+    return `${fname}_${lname}`
+        .toLowerCase()
+        .replace(/\s+/g, "_")
+        .replace(/[^a-z0-9_]/g, "");
 }
 
-module.exports = formatImageName;
+export default formatImageName;
 
 // Route to return the list of all professors with images
 app.get('/prof-list', async (req, res) => {
-  try {
-      const users = await User.find({}, '-image'); //Prof images temporarily disabled | Originally: "const users = await User.find();"
-      console.log('Professors:', users);
-      if (users.length === 0) {
-          return res.status(200).json({ message: 'No professors found.', users: [] });
-      }
-      const usersWithBlobImages = users.map(u => {
-          const imgName = formatImageName(u.fname, u.lname);
-          return {
-              ...u.toObject(),
-              imageUrl: `https://ecamsblobstorageaccount.blob.core.windows.net/prof-images/${imgName}.png`
-          };
-      });
+    try {
+        const users = await User.find({}, '-image'); //Prof images temporarily disabled | Originally: "const users = await User.find();"
+        console.log('Professors:', users);
+        if (users.length === 0) {
+            return res.status(200).json({ message: 'No professors found.', users: [] });
+        }
+        const usersWithBlobImages = users.map(u => {
+            const imgName = formatImageName(u.fname, u.lname);
+            return {
+                ...u.toObject(),
+                imageUrl: `https://ecamsblobstorageaccount.blob.core.windows.net/prof-images/${imgName}.png`
+            };
+        });
 
-      res.json(usersWithBlobImages);
-      //res.json(users);
-  } catch (err) {
-      console.error('Failed to fetch professors:', err);
-      res.status(500).json({ error: 'Failed to fetch professors' });
-  }
+        res.json(usersWithBlobImages);
+        //res.json(users);
+    } catch (err) {
+        console.error('Failed to fetch professors:', err);
+        res.status(500).json({ error: 'Failed to fetch professors' });
+    }
 });
 
 // Route to get data about a specific professor
 app.get('/prof-info/:id', async (req, res) => {
-  try {
-      const professor = await User.findById(req.params.id, '-image'); // Prof images temporarily disabled | Ofiginally: "const professor = await User.findById(req.params.id);"
-      if (!professor) {
-          return res.status(404).json({ error: 'Professor not found' });
-      }
-      const imgName = formatImageName(professor.fname, professor.lname);
+    try {
+        const professor = await User.findById(req.params.id, '-image'); // Prof images temporarily disabled | Ofiginally: "const professor = await User.findById(req.params.id);"
+        if (!professor) {
+            return res.status(404).json({ error: 'Professor not found' });
+        }
+        const imgName = formatImageName(professor.fname, professor.lname);
 
-      res.json({
-          ...professor.toObject(),
-          imageUrl: `https://ecamsblobstorageaccount.blob.core.windows.net/prof-images/${imgName}.png`
-      });
-      //res.json(professor);
-  } catch (error) {
-      console.error('Error fetching professor:', error.message);
-      res.status(500).json({ error: 'An error occurred while fetching the data' });
-  }
+        res.json({
+            ...professor.toObject(),
+            imageUrl: `https://ecamsblobstorageaccount.blob.core.windows.net/prof-images/${imgName}.png`
+        });
+        //res.json(professor);
+    } catch (error) {
+        console.error('Error fetching professor:', error.message);
+        res.status(500).json({ error: 'An error occurred while fetching the data' });
+    }
 });
 
 // Initialize GridFS
 let gfsBucket;
 db.once('open', () => {
-  gfsBucket = new mongoose.mongo.GridFSBucket(db.db, {
-    bucketName: 'slides',
-  });
-  app.locals.gfsBucket = gfsBucket;
-  app.locals.db = db;
-  console.log('GridFSBucket for "slides" initialized.');
+    gfsBucket = new mongoose.mongo.GridFSBucket(db.db, {
+        bucketName: 'slides',
+    });
+    app.locals.gfsBucket = gfsBucket;
+    app.locals.db = db;
+    console.log('GridFSBucket for "slides" initialized.');
 });
-
-// /uploads gets redirected to routes/upload.js
-const uploadRoutes = require('./routes/upload');
-app.use('/upload', uploadRoutes);
 
 
 // Route to upload an image to MongoDB using GridFS
@@ -450,27 +745,40 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 });
 */
 
-// Route to delete an image from MongoDB
+// Route to archive (not permanently delete) a slide
 app.delete('/delete-slide/:id', isAuthenticated, async (req, res) => {
-  try {
-      const { id } = req.params;
-      const file = await db.collection('slides.files').findOne({ _id: new mongoose.Types.ObjectId(id) });
+    try {
+        const { id } = req.params;
 
-      if (!file) {
-          return res.status(404).json({ error: 'File not found' });
-      }
+        const fileId = new mongoose.Types.ObjectId(id);
 
-      // Delete the file from GridFS
-      await gfsBucket.delete(file._id);
+        // Find slide metadata
+        const slide = await db.collection('Slides').findOne({ fileId });
 
-      // Remove the metadata from the Slides collection
-      await db.collection('Slides').deleteOne({ fileId: file._id });
+        if (!slide) {
+            return res.status(404).json({ error: 'Slide not found' });
+        }
 
-      res.json({ message: 'Slide deleted successfully' });
-  } catch (err) {
-      console.error('Failed to delete slide:', err);
-      res.status(500).json({ error: 'Failed to delete slide', details: err });
-  }
+        // Clone slide
+        const archivedSlide = { ...slide };
+
+        // Remove original _id so Mongo generates a new one
+        delete archivedSlide._id;
+
+        archivedSlide.archivedAt = new Date();
+        archivedSlide.archivedBy = req.user?.email || 'system';
+
+        await db.collection('ArchivedSlides').insertOne(archivedSlide);
+
+        // Remove from active Slides
+        await db.collection('Slides').deleteOne({ fileId });
+
+        res.json({ message: 'Slide archived successfully' });
+
+    } catch (err) {
+        console.error('Failed to archive slide:', err);
+        res.status(500).json({ error: 'Failed to archive slide', details: err });
+    }
 });
 
 /* TODO: both this and AdminPanel.js on the main repo are both to be considered
@@ -479,26 +787,26 @@ app.delete('/delete-slide/:id', isAuthenticated, async (req, res) => {
 const ACP_PASSWORD = process.env.ACP_PASSWORD;
 
 app.post('/login', (req, res) => {
-  const { password } = req.body;
+    const { password } = req.body;
 
-  if (!password) {
-    return res.status(400).json({
-      success: false,
-      message: "Password is required"
+    if (!password) {
+        return res.status(400).json({
+            success: false,
+            message: "Password is required"
+        });
+    }
+
+    if (password !== ACP_PASSWORD) {
+        return res.status(401).json({
+            success: false,
+            message: "Invalid password"
+        });
+    }
+
+    return res.status(200).json({
+        success: true,
+        message: "Login successful"
     });
-  }
-
-  if (password !== ACP_PASSWORD) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid password"
-    });
-  }
-
-  return res.status(200).json({
-    success: true,
-    message: "Login successful"
-  });
 });
 
 
@@ -522,32 +830,136 @@ app.get('/image/:id', async (req, res) => {
     }
 });
 
-  
-  // Route to return all images (as JSON)
-  app.get('/list-images', async (req, res) => {
+
+app.get('/list-images', async (req, res) => {
     try {
-      const slides = await db.collection('Slides').find().toArray();
-      if (!slides || slides.length === 0) {
-        return res.status(404).json({ message: 'No images found.' });
-      }
-      res.json(slides); // Return slides instead of files
+        const slides = await db.collection('Slides').find().toArray();
+
+        if (!slides || slides.length === 0) {
+            return res.status(404).json({ message: 'No images found.' });
+        }
+
+        const now = new Date();
+
+        slides.forEach(slide => {
+            if (!slide.uploadDate) return;
+
+            const uploadDate = new Date(slide.uploadDate);
+            const ageMs = now - uploadDate;
+            const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+
+            if (ageDays >= STALE_THRESHOLD_DAYS) {
+                console.warn(
+                    `Slide "${slide.filename}" (${slide.fileId}) is ${ageDays} days old and may be obsolete.`
+                );
+            }
+        });
+
+        res.json(slides);
+
     } catch (err) {
         console.error('Failed to list images:', err);
-        es.status(500).json({ error: 'Failed to list images', details: err });
+        res.status(500).json({ error: 'Failed to list images', details: err });
     }
-  });
+});
+       cron.schedule('0 0 * * 0', async () => {
+    console.log('Running weekly stale slide check...');
 
-  // list of all approved images only for display
-  app.get('/list-approved-images', async (req, res) => {
     try {
-        const approvedSlides = await db.collection('Slides').find({ approved: true }).toArray();
-        if (!approvedSlides || approvedSlides.length === 0) {
-            return res.status(200).json({ message: 'No approved slides found.' });
-        }
-        res.json(approvedSlides);
+        const slides = await db.collection('Slides').find().toArray();
+        const now = new Date();
+
+        slides.forEach(slide => {
+            if (!slide.uploadDate) return;
+
+            const uploadDate = new Date(slide.uploadDate);
+            const ageMs = now - uploadDate;
+            const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+
+            if (ageDays >= STALE_THRESHOLD_DAYS) {
+                console.warn(
+                    `Slide "${slide.filename}" (${slide.fileId}) is ${ageDays} days old and may be obsolete.`
+                );
+            }
+        });
+
+        console.log('Weekly stale slide check complete.');
     } catch (err) {
-        console.error('Failed to list approved slides:', err);
-        res.status(500).json({ error: 'Failed to list approved slides', details: err });
+        console.error('Error during weekly stale slide check:', err);
+    }
+
+}, {
+    timezone: "America/New_York"
+});
+
+// Route to list archived slides
+app.get('/list-archived', isAuthenticated, async (req, res) => {
+    try {
+        const archivedSlides = await db.collection('ArchivedSlides')
+            .find()
+            .sort({ archivedAt: -1 })
+            .toArray();
+
+        res.json(archivedSlides);
+    } catch (err) {
+        console.error('Failed to list archived slides:', err);
+        res.status(500).json({ error: 'Failed to list archived slides' });
+    }
+});
+
+app.get('/list-approved-images', async (req, res) => {
+    try {
+        const slides = await db.collection('Slides')
+            .find({
+                approved: true,
+                archived: { $ne: true }
+            })
+            .toArray();
+
+        res.json(slides);
+
+    } catch (err) {
+        console.error('Failed to list approved images:', err);
+        res.status(500).json({ error: 'Failed to fetch approved images' });
+    }
+});
+
+// Restore archived slide
+app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const fileId = new mongoose.Types.ObjectId(id);
+
+        const archivedSlide = await db.collection('ArchivedSlides')
+            .findOne({ fileId });
+
+        if (!archivedSlide) {
+            return res.status(404).json({ error: 'Archived slide not found' });
+        }
+
+        // 🔥 Prevent duplicates
+        const existingSlide = await db.collection('Slides')
+            .findOne({ fileId });
+
+        if (existingSlide) {
+            return res.status(400).json({ error: 'Slide already restored' });
+        }
+
+        // Remove archive metadata
+        delete archivedSlide._id;
+        delete archivedSlide.archivedAt;
+        delete archivedSlide.archivedBy;
+
+        await db.collection('Slides').insertOne(archivedSlide);
+
+        await db.collection('ArchivedSlides')
+            .deleteOne({ fileId });
+
+        res.json({ message: 'Slide restored successfully' });
+
+    } catch (err) {
+        console.error('Failed to restore slide:', err);
+        res.status(500).json({ error: 'Failed to restore slide' });
     }
 });
 
@@ -566,31 +978,49 @@ app.put('/approve-slide/:id', isAuthenticated, async (req, res) => {
           return res.status(404).json({ error: 'Slide not found' });
       }
 
-      res.json({ message: 'Slide approved successfully' });
-  } catch (err) {
-      console.error('Failed to approve slide:', err);
-      res.status(500).json({ error: 'Failed to approve slide' });
-  }
+        if (!slide.matchedCount) {
+            return res.status(404).json({ error: 'Slide not found' });
+        }
+
+        res.json({ message: 'Slide approved successfully' });
+    } catch (err) {
+        console.error('Failed to approve slide:', err);
+        res.status(500).json({ error: 'Failed to approve slide' });
+    }
 });
 
 // This is for declining slides
 app.put('/decline-slide/:id', isAuthenticated, async (req, res) => {
-  try {
-      const { id } = req.params;
-      const slide = await db.collection('Slides').updateOne(
-          { fileId: new mongoose.Types.ObjectId(id) },
-          { $set: { approved: false } }
-      );
+    try {
+        const { id } = req.params;
+        const fileId = new mongoose.Types.ObjectId(id);
 
-      if (!slide.matchedCount) {
-          return res.status(404).json({ error: 'Slide not found' });
-      }
+        const slide = await db.collection('Slides').findOne({ fileId });
 
-      res.json({ message: 'Slide declined successfully' });
-  } catch (err) {
-      console.error('Failed to decline slide:', err);
-      res.status(500).json({ error: 'Failed to decline slide' });
-  }
+        if (!slide) {
+            return res.status(404).json({ error: 'Slide not found' });
+        }
+
+        // Clone slide
+        const archivedSlide = { ...slide };
+        delete archivedSlide._id;
+
+        archivedSlide.archivedAt = new Date();
+        archivedSlide.archivedBy = req.user?.email || 'system';
+        archivedSlide.declineReason = 'Admin declined submission';
+
+        // Move to archive
+        await db.collection('ArchivedSlides').insertOne(archivedSlide);
+
+        // Remove from active Slides
+        await db.collection('Slides').deleteOne({ fileId });
+
+        res.json({ message: 'Slide declined and archived successfully' });
+
+    } catch (err) {
+        console.error('Failed to decline slide:', err);
+        res.status(500).json({ error: 'Failed to decline slide' });
+    }
 });
 
 app.put('/edit-department/:id', isAuthenticated, async (req, res) => {
