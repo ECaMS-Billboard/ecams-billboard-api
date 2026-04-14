@@ -43,9 +43,10 @@
             margin-bottom: 20px;
         }
 
-        input, button {
+        input,
+        button {
             margin: 5px;
-            padding: 8px;
+            padding: 5px;
             border-radius: 5px;
             border: 1px solid #ced4da;
         }
@@ -59,11 +60,6 @@
             background-color: #0056b3;
             color: white;
         }
-
-        #upload-message {
-            margin-top: 10px;
-            font-weight: bold;
-        }
     </style>
 </head>
 
@@ -72,29 +68,58 @@
         <h1>Slides</h1>
         <p id="submissions-status" style="margin: 8px 0 20px; color:#b11010; font-weight:bold;"></p>
         <button onclick="window.location.href='/'">Back</button>
-
+        <button onclick="fetchSlides()">Active Slides</button>
+        <button onclick="fetchArchivedSlides()">Archived Slides</button>
         <form id="add-slide-form" enctype="multipart/form-data">
-            <input
-                type="email"
-                id="submitter-email"
-                placeholder="Enter your email"
-                required
-            >
-            <input
-                type="file"
-                id="slide-file"
-                accept="image/*"
-                required
-            >
+            <input type="file" id="slide-file" accept="image/*" required>
             <button type="submit">Add Slide</button>
         </form>
-
-        <p id="upload-message"></p>
-
         <div id="slides-data"></div>
     </div>
-
     <script>
+        let submissionsEnabled = true; // default; will be updated on load
+
+        // === UI helpers ===
+        function setUploadFormEnabled(enabled) {
+            const fileInput = document.getElementById('slide-file');
+            const submitBtn = document.querySelector('#add-slide-form button[type="submit"]');
+            const statusEl = document.getElementById('submissions-status');
+
+            submissionsEnabled = enabled;
+
+            if (enabled) {
+                statusEl.textContent = '✅ Flyer submissions are ENABLED.';
+                statusEl.style.color = '#1b5e20';
+                fileInput.disabled = false;
+                submitBtn.disabled = false;
+                submitBtn.title = '';
+            } else {
+                statusEl.textContent = '🚫 Flyer submissions are DISABLED by an administrator.';
+                statusEl.style.color = '#b11010';
+                fileInput.disabled = true;
+                submitBtn.disabled = true;
+                submitBtn.title = 'Uploads are currently disabled';
+            }
+        }
+
+        async function refreshUploadToggleStatus() {
+            try {
+                // same-origin; cookies already present; add credentials for clarity
+                const res = await fetch('/api/admin/submissions/enabled', { credentials: 'include' });
+                if (!res.ok) throw new Error(`Status fetch failed: ${res.status}`);
+                const data = await res.json();
+                setUploadFormEnabled(Boolean(data.submissionsEnabled));
+            } catch (e) {
+                console.error(e);
+                // If status can’t be read, keep form enabled to avoid blocking admins accidentally,
+                // but show a warning to the user.
+                const statusEl = document.getElementById('submissions-status');
+                statusEl.textContent = '⚠️ Unable to verify submission status. (Check network/auth.)';
+                statusEl.style.color = '#b36b00';
+            }
+        }
+
+        // === Slides list ===
         function fetchSlides() {
             fetch('/list-images', { credentials: 'include' })
                 .then(response => response.json())
@@ -105,29 +130,24 @@
                         return;
                     }
                     let html = '<ul>';
-
                     data.forEach(slide => {
                         html += `<li>
                                     <img src="/image/${slide.fileId}" alt="${slide.filename}">
                                     <p>${slide.filename}</p>
                                     <p>Department: <span id="department-${slide.fileId}">${slide.department}</span></p>
                                     <p>Status: ${slide.approved ? 'Approved' : 'Pending'}</p>
-                                    <p>Uploaded by: ${slide.email ? slide.email : 'N/A'}</p>
-                                    <p>Approved by: ${slide.approvedBy ? slide.approvedBy : 'N/A'}</p>
                                     <button onclick="changeDepartment('${slide.fileId}')">Change Department</button>
                                     <button onclick="approveSlide('${slide.fileId}')">Approve</button>
                                     <button onclick="declineSlide('${slide.fileId}')">Decline</button>
                                     <button onclick="deleteSlide('${slide.fileId}')">Archive</button>
                                  </li>`;
                     });
-
                     html += '</ul>';
                     slidesDiv.innerHTML = html;
                 })
                 .catch(err => {
                     console.error('Failed to fetch slides:', err);
-                    document.getElementById('slides-data').innerHTML =
-                        'Failed to fetch slides. Please try again later.';
+                    document.getElementById('slides-data').innerHTML = 'Failed to fetch slides. Please try again later.';
                 });
         }
         
@@ -137,16 +157,30 @@
                 .then(data => {
                     const slidesDiv = document.getElementById('slides-data');
 
-        document.getElementById('add-slide-form').addEventListener('submit', function(event) {
-            event.preventDefault();
+                    if (!Array.isArray(data) || data.length === 0) {
+                        slidesDiv.innerHTML = '<p>No archived slides found.</p>';
+                        return;
+                    }
 
-            const uploadMessage = document.getElementById('upload-message');
-            const email = document.getElementById('submitter-email').value;
-            const file = document.getElementById('slide-file').files[0];
+                    let html = '<ul>';
 
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('email', email);
+                    data.forEach(slide => {
+                        html += `
+                            <li>
+                                <p><strong>${slide.filename}</strong></p>
+                                <p>Archived At: ${slide.archivedAt ? new Date(slide.archivedAt).toLocaleString() : 'Unknown'}</p>
+                                <button onclick="restoreSlide('${slide.fileId}')">Restore</button>
+                            </li>
+                        `;
+                    });
+
+                    html += '</ul>';
+                    slidesDiv.innerHTML = html;
+                })
+                .catch(err => {
+                    console.error('Failed to fetch archived slides:', err);
+                });
+        }
 
         function restoreSlide(id) {
             if (!confirm('Restore this slide?')) return;
@@ -198,30 +232,17 @@
                 // Success
                 await fetchSlides();
                 document.getElementById('add-slide-form').reset();
-                uploadMessage.innerText = 'Poster submitted successfully. It is now pending approval.';
-            })
-            .catch(err => {
+            } catch (err) {
                 console.error('Failed to upload slide:', err);
-                uploadMessage.innerText = 'Upload failed. Please try again.';
-            });
+                alert('Upload failed. See console for details.');
+            }
         });
 
+        // === Approve/Decline/Delete ===
         function approveSlide(id) {
-            const approverName = prompt('Enter your name:');
-
-            if (!approverName) {
-                return;
-            }
-
-            fetch(`/approve-slide/${id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ approvedBy: approverName })
-            })
-            .then(() => fetchSlides())
-            .catch(err => console.error('Failed to approve slide:', err));
+            fetch(`/approve-slide/${id}`, { method: 'PUT', credentials: 'include' })
+                .then(() => fetchSlides())
+                .catch(err => console.error('Failed to approve slide:', err));
         }
 
         function declineSlide(id) {
@@ -263,16 +284,26 @@
                     credentials: 'include',
                     body: JSON.stringify({ department: newDepartment }),
                 })
-                .then(() => {
-                    document.getElementById(`department-${id}`).innerText = newDepartment;
-                })
-                .catch(err => {
-                    console.error('Failed to change department:', err);
-                });
+                    .then(() => {
+                        document.getElementById(`department-${id}`).innerText = newDepartment;
+                    })
+                    .catch(err => console.error('Failed to change department:', err));
             }
         }
 
-        fetchSlides();
+        // Expose functions used in inline onclick handlers
+        window.approveSlide = approveSlide;
+        window.declineSlide = declineSlide;
+        window.deleteSlide = deleteSlide;
+        window.changeDepartment = changeDepartment;
+        window.restoreSlide = restoreSlide;
+
+        // === On page load ===
+        (async function init() {
+            await refreshUploadToggleStatus();
+            fetchSlides();
+        })();
     </script>
 </body>
+
 </html>

@@ -22,10 +22,21 @@ import crypto from 'crypto';
 
 const router = express.Router();
 
-const express = require('express');
-const multer = require('multer');
-const { Readable } = require('stream');
-const router = express.Router();
+
+
+// Middleware to block uploads when disabled
+function checkSubmissionsEnabled(req, res, next) {
+  // getSubmissionsEnabled() was attached to app.locals in index.js
+  const getFlag = req.app.locals.getSubmissionsEnabled;
+
+  if (typeof getFlag === 'function' && !getFlag()) {
+    return res.status(503).json({
+      error: 'Flyer submissions are currently disabled by an administrator.'
+    });
+  }
+
+  next(); // continue if allowed
+}
 
 // Multer setup — store files in memory and validate on upload
 const storage = multer.memoryStorage();
@@ -41,6 +52,7 @@ const upload = multer({
     const allowedMime = ['image/png', 'image/jpeg'];
     const allowedExt = /\.(png|jpg|jpeg)$/i;
 
+    // Check MIME type and extension
     if (!allowedMime.includes(file.mimetype) || !allowedExt.test(file.originalname)) {
       return cb(new Error('INVALID_FILE_TYPE'));
     }
@@ -88,6 +100,8 @@ router.post(
     console.log('Headers:', req.headers);
     console.log('File present before multer?', req.file);
 
+
+  // Use multer’s single-file middleware manually, so we can catch its errors
   upload.single('file')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
@@ -99,14 +113,16 @@ router.post(
     } else if (err) {
       return res.status(500).json({ error: 'Unexpected upload error.', details: err.message });
     }
-
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded.' });
     }
 
     next();
   });
-}, async (req, res) => {
+}, 
+validateMagicNumber,
+async (req, res) => {
+  // Pull MongoDB and GridFS bucket from app.locals (set in index.js)
   const db = req.app.locals.db;
   const gfsBucket = req.app.locals.gfsBucket;
   console.log('db present?', !!db);
@@ -118,57 +134,56 @@ router.post(
   }
 
   try {
-    const { description = '', notes = '', email = '' } = req.body;
+      const { description = '', notes = '' } = req.body;
 
-    const sanitizedFilename = req.file.originalname.replace(/[^\w.\-]/g, '_');
+      const sanitizedOriginal = sanitizeFilename(req.file.originalname || 'upload');
+      
+      // strip any user-supplied extension and force the detected extension
+      const base = sanitizedOriginal.replace(/\.[^.]*$/, '') || 'file';
+      const finalFilename = `${base}${req.detectedExt}`;
 
-    const readableStream = new Readable();
-    readableStream.push(req.file.buffer);
-    readableStream.push(null);
+      const readableStream = new Readable();
+      readableStream.push(req.file.buffer);
+      readableStream.push(null);
 
-    const uploadStream = gfsBucket.openUploadStream(sanitizedFilename, {
-      contentType: req.file.mimetype,
-    });
-
-    readableStream.pipe(uploadStream);
-
-    uploadStream.on('finish', async () => {
-      const file = await db.collection('slides.files').findOne({ filename: sanitizedFilename });
-      console.log('GridFS upload finished for file:', sanitizedFilename);
-
-      if (!file) {
-        return res.status(500).json({ error: 'File upload failed unexpectedly.' });
-      }
-
-      await db.collection('Slides').insertOne({
-        filename: file.filename,
-        contentType: file.contentType,
-        length: file.length,
-        uploadDate: file.uploadDate,
-        fileId: file._id,
-        description,
-        department: 'N/A',
-        notes,
-        email,
-        approved: false,
-        approvedBy: '',
+      const uploadStream = gfsBucket.openUploadStream(finalFilename, {
+        contentType: req.detectedMime,
       });
 
-      return res.status(201).json({
-        message: 'Image uploaded successfully.',
-        metadata: {
-          filename: sanitizedFilename,
-          email,
-          approved: false,
-          approvedBy: '',
-        },
-      });
-    });
+      readableStream.pipe(uploadStream);
 
-    uploadStream.on('error', (err) => {
-      console.error('GridFS upload error:', err);
-      res.status(500).json({ error: 'Failed to upload image.', details: err.message });
-    });
+      uploadStream.on('finish', async () => {
+        try {
+          const file = await db.collection('slides.files').findOne({ filename: finalFilename });
+
+          console.log('GridFS upload finished for file:', finalFilename);
+
+          if (!file) {
+            return res.status(500).json({ error: 'Image upload failed' });
+          }
+
+          await db.collection('Slides').insertOne({
+            filename: file.filename,
+            contentType: file.contentType,
+            length: file.length,
+            uploadDate: file.uploadDate,
+            fileId: file._id,
+            description: description,
+            department: 'N/A',
+            notes: notes,
+            approved: false,
+          });
+
+          return res.status(201).json({
+            file,
+            message: 'Image uploaded successfully',
+            metadata: { description, approved: false }
+          });
+        } catch (e) {
+          console.error('Error after GridFS finish:', e);
+          return res.status(500).json({ error: 'Failed to save metadata', details: e.message });
+        }
+      });
 
       uploadStream.on('error', (err) => {
         console.error('Upload failed:', err);
