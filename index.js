@@ -199,10 +199,10 @@ const bracketSchema = new mongoose.Schema({
 const Bracket = mongoose.model("Bracket", bracketSchema);
 
 /* =========================
-   CREATE MARCH BRACKET
+   CREATE BRACKET
 ========================= */
 
-const createMarchBracket = async () => {
+const createBracket = async () => {
   // Edit entries here
   const items = [
     "Toy Story",
@@ -315,7 +315,7 @@ app.get("/api/bracket", async (req, res) => {
     let bracket = await Bracket.findOne();
 
     if (!bracket) {
-      bracket = await createMarchBracket();
+      bracket = await createBracket();
     }
 
     bracket = await advanceRoundIfNeeded(bracket);
