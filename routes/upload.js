@@ -3,30 +3,18 @@
 /*
 Handles all file uploads from the frontend (/upload endpoint).
 This version includes input sanitization, detailed error messages,
-and strict control over file types and size limits.
-
-Checks supplied 
-Although with that being said, this input sanitisation is still incomplete.
-
-VULNERABILITIES: (From what I know of)
-
-1. No tracking of who uploads what or any timestamps
-
-2. Anyone can upload infinite times
- */
+strict control over file types and size limits, uploader email,
+and upload/submission date tracking.
+*/
 
 import express from 'express';
 import multer from 'multer';
 import { Readable } from 'stream';
-import crypto from 'crypto';
 
 const router = express.Router();
 
-
-
 // Middleware to block uploads when disabled
 function checkSubmissionsEnabled(req, res, next) {
-  // getSubmissionsEnabled() was attached to app.locals in index.js
   const getFlag = req.app.locals.getSubmissionsEnabled;
 
   if (typeof getFlag === 'function' && !getFlag()) {
@@ -35,7 +23,7 @@ function checkSubmissionsEnabled(req, res, next) {
     });
   }
 
-  next(); // continue if allowed
+  next();
 }
 
 // Multer setup — store files in memory and validate on upload
@@ -52,7 +40,6 @@ const upload = multer({
     const allowedMime = ['image/png', 'image/jpeg'];
     const allowedExt = /\.(png|jpg|jpeg)$/i;
 
-    // Check MIME type and extension
     if (!allowedMime.includes(file.mimetype) || !allowedExt.test(file.originalname)) {
       return cb(new Error('INVALID_FILE_TYPE'));
     }
@@ -72,14 +59,13 @@ function validateMagicNumber(req, res, next) {
   // PNG signature: 0x89 0x50 0x4E 0x47
   const isPNG = b0 === 0x89 && b1 === 0x50 && b2 === 0x4e && b3 === 0x47;
 
-  // JPEG signature: 0xFF 0xD8 0xFF (first three bytes)
+  // JPEG signature: 0xFF 0xD8 0xFF
   const isJPG = b0 === 0xff && b1 === 0xd8 && b2 === 0xff;
 
   if (!isPNG && !isJPG) {
-    return res.status(400).json({ error: 'Invalid file signature (not a real PNG/JPEG).' });
+    return res.status(400).json({ error: 'Invalid file signature. Only real PNG/JPEG files are allowed.' });
   }
 
-  // attach detected ext/mime for downstream
   req.detectedExt = isPNG ? '.png' : '.jpg';
   req.detectedMime = isPNG ? 'image/png' : 'image/jpeg';
 
@@ -87,7 +73,6 @@ function validateMagicNumber(req, res, next) {
 }
 
 function sanitizeFilename(originalName = '') {
-  // Replace anything not alnum, dot, underscore, hyphen with underscore
   return String(originalName).replace(/[^\w.\-]/g, '_');
 }
 
@@ -95,50 +80,52 @@ router.post(
   '/',
   checkSubmissionsEnabled,
   (req, res, next) => {
-    console.log('--- Upload request received ---');
-    console.log('Body:', req.body);
-    console.log('Headers:', req.headers);
-    console.log('File present before multer?', req.file);
+    upload.single('file')(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'File too large. Max size is 5 MB.' });
+        }
 
-
-  // Use multer’s single-file middleware manually, so we can catch its errors
-  upload.single('file')(req, res, (err) => {
-    if (err instanceof multer.MulterError) {
-      if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ error: 'File too large. Max size is 5 MB.' });
+        return res.status(400).json({ error: `Upload error: ${err.message}` });
       }
-      return res.status(400).json({ error: `Upload error: ${err.message}` });
-    } else if (err && err.message === 'INVALID_FILE_TYPE') {
-      return res.status(400).json({ error: 'Invalid file type. Only PNG and JPEG are allowed.' });
-    } else if (err) {
-      return res.status(500).json({ error: 'Unexpected upload error.', details: err.message });
+
+      if (err && err.message === 'INVALID_FILE_TYPE') {
+        return res.status(400).json({ error: 'Invalid file type. Only PNG and JPEG are allowed.' });
+      }
+
+      if (err) {
+        return res.status(500).json({ error: 'Unexpected upload error.', details: err.message });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded.' });
+      }
+
+      next();
+    });
+  },
+  validateMagicNumber,
+  async (req, res) => {
+    const db = req.app.locals.db;
+    const gfsBucket = req.app.locals.gfsBucket;
+
+    if (!db || !gfsBucket) {
+      console.error('Database or GridFSBucket not initialized yet.');
+      return res.status(500).json({ error: 'Database not ready. Please try again later.' });
     }
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded.' });
-    }
 
-    next();
-  });
-}, 
-validateMagicNumber,
-async (req, res) => {
-  // Pull MongoDB and GridFS bucket from app.locals (set in index.js)
-  const db = req.app.locals.db;
-  const gfsBucket = req.app.locals.gfsBucket;
-  console.log('db present?', !!db);
-  console.log('gfsBucket present?', !!gfsBucket);
+    try {
+      const {
+        description = '',
+        notes = '',
+        email = ''
+      } = req.body;
 
-  if (!db || !gfsBucket) {
-    console.error('Database or GridFSBucket not initialized yet.');
-    return res.status(500).json({ error: 'Database not ready. Please try again later.' });
-  }
-
-  try {
-      const { description = '', notes = '' } = req.body;
+      const submittedAt = new Date();
 
       const sanitizedOriginal = sanitizeFilename(req.file.originalname || 'upload');
-      
-      // strip any user-supplied extension and force the detected extension
+
+      // Strip user extension and force the detected extension
       const base = sanitizedOriginal.replace(/\.[^.]*$/, '') || 'file';
       const finalFilename = `${base}${req.detectedExt}`;
 
@@ -156,8 +143,6 @@ async (req, res) => {
         try {
           const file = await db.collection('slides.files').findOne({ filename: finalFilename });
 
-          console.log('GridFS upload finished for file:', finalFilename);
-
           if (!file) {
             return res.status(500).json({ error: 'Image upload failed' });
           }
@@ -167,17 +152,26 @@ async (req, res) => {
             contentType: file.contentType,
             length: file.length,
             uploadDate: file.uploadDate,
+            submittedAt: submittedAt,
             fileId: file._id,
             description: description,
             department: 'N/A',
             notes: notes,
+            email: email,
             approved: false,
+            approvedBy: '',
           });
 
           return res.status(201).json({
             file,
             message: 'Image uploaded successfully',
-            metadata: { description, approved: false }
+            metadata: {
+              description,
+              email,
+              approved: false,
+              approvedBy: '',
+              submittedAt: submittedAt
+            }
           });
         } catch (e) {
           console.error('Error after GridFS finish:', e);
@@ -195,4 +189,5 @@ async (req, res) => {
     }
   }
 );
+
 export default router;
