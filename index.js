@@ -179,6 +179,17 @@ const matchupSchema = new mongoose.Schema({
   }
 });
 
+const winnerSchema = new mongoose.Schema({
+  topic: String,
+  winner: String,
+  completedAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+const Winner = mongoose.model("Winner", winnerSchema);
+
 const bracketSchema = new mongoose.Schema({
   topic: String,
   currentRound: {
@@ -205,14 +216,14 @@ const Bracket = mongoose.model("Bracket", bracketSchema);
 const createBracket = async () => {
   // Edit entries here
   const items = [
-    "Toy Story",
-    "Finding Nemo",
-    "Up",
-    "Inside Out",
-    "Coco",
-    "Monsters Inc",
-    "The Incredibles",
-    "Cars"
+    "Lily",
+    "Tulip",
+    "Poppy",
+    "Daisy",
+    "Lilac",
+    "Sunflower",
+    "Peony",
+    "Rose"
   ];
 
 
@@ -234,7 +245,7 @@ const createBracket = async () => {
   }
 
   const bracket = new Bracket({
-    topic: "Favorite Disney Movie",
+    topic: "Favorite Flower",
     currentRound: 0,
     matchups,
     roundStart: new Date(),
@@ -270,13 +281,26 @@ const advanceRoundIfNeeded = async (bracket) => {
 
   if (winners.length === 1) {
 
-    bracket.tournamentEnded = true;
-    bracket.matchups = [{ pair: [winners[0]], votes: {} }];
+  
+    const existing = await Winner.findOne({
+  topic: bracket.topic,
+  winner: winners[0]
+});
 
-    await bracket.save();
-    return bracket;
+if (!existing) {
+  await Winner.create({
+    topic: bracket.topic,
+    winner: winners[0]
+  });
+}
 
-  }
+  bracket.tournamentEnded = true;
+  bracket.matchups = [{ pair: [winners[0]], votes: {} }];
+
+  await bracket.save();
+  return bracket;
+
+}
 
   const nextRound = [];
 
@@ -328,6 +352,15 @@ app.get("/api/bracket", async (req, res) => {
 
   }
 
+});
+
+app.get("/api/bracket/winners", async (req, res) => {
+  try {
+    const winners = await Winner.find().sort({ completedAt: -1 });
+    res.json(winners);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /* =========================
@@ -392,15 +425,30 @@ app.post("/api/bracket/advance", async (req, res) => {
       return aVotes >= bVotes ? a : b;
     });
 
-    // Tournament finished
+    
     if (winners.length === 1) {
+
+      // Prevent duplicates
+      const existing = await Winner.findOne({
+        topic: bracket.topic,
+        winner: winners[0]
+      });
+
+      if (!existing) {
+        await Winner.create({
+          topic: bracket.topic,
+          winner: winners[0]
+        });
+      }
+
       bracket.tournamentEnded = true;
       bracket.matchups = [{ pair: [winners[0]], votes: {} }];
+
       await bracket.save();
       return res.json(bracket);
     }
 
-    // Build next round
+    
     const nextRound = [];
 
     for (let i = 0; i < winners.length; i += 2) {
