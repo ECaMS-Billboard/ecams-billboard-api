@@ -166,6 +166,12 @@ const AllowedEmail = db.model(
 
 
 
+
+
+/* =========================
+   SCHEMAS
+========================= */
+
 const matchupSchema = new mongoose.Schema({
   pair: [String],
   votes: {
@@ -174,7 +180,7 @@ const matchupSchema = new mongoose.Schema({
     default: {}
   },
   voters: {
-    type: [String], // store IPs
+    type: [String],
     default: []
   }
 });
@@ -214,7 +220,6 @@ const Bracket = mongoose.model("Bracket", bracketSchema);
 ========================= */
 
 const createBracket = async () => {
-  // Edit entries here
   const items = [
     "Lily",
     "Tulip",
@@ -225,8 +230,7 @@ const createBracket = async () => {
     "Peony",
     "Rose"
   ];
-
-
+  
 
   const matchups = [];
 
@@ -258,12 +262,13 @@ const createBracket = async () => {
 };
 
 /* =========================
-   AUTO ADVANCE ROUND
+   ADVANCE ROUND
 ========================= */
 
 const advanceRoundIfNeeded = async (bracket) => {
 
   const now = new Date();
+
   const week = 7 * 24 * 60 * 60 * 1000;
 
   if (now - bracket.roundStart < week) return bracket;
@@ -279,28 +284,37 @@ const advanceRoundIfNeeded = async (bracket) => {
 
   });
 
+  /* =========================
+     TOURNAMENT FINISHED
+  ========================= */
+
   if (winners.length === 1) {
 
-  
+    // Save winner (no duplicates)
     const existing = await Winner.findOne({
-  topic: bracket.topic,
-  winner: winners[0]
-});
+      topic: bracket.topic,
+      winner: winners[0]
+    });
 
-if (!existing) {
-  await Winner.create({
-    topic: bracket.topic,
-    winner: winners[0]
-  });
-}
+    if (!existing) {
+      await Winner.create({
+        topic: bracket.topic,
+        winner: winners[0]
+      });
+    }
 
-  bracket.tournamentEnded = true;
-  bracket.matchups = [{ pair: [winners[0]], votes: {} }];
+    // mark old bracket as finished
+    bracket.tournamentEnded = true;
+    await bracket.save();
 
-  await bracket.save();
-  return bracket;
+    //CREATE NEW BRACKET 
+    const newBracket = await createBracket();
+    return newBracket;
+  }
 
-}
+  /* =========================
+     NEXT ROUND
+  ========================= */
 
   const nextRound = [];
 
@@ -354,6 +368,10 @@ app.get("/api/bracket", async (req, res) => {
 
 });
 
+/* =========================
+   GET WINNERS (PAST BRACKETS)
+========================= */
+
 app.get("/api/bracket/winners", async (req, res) => {
   try {
     const winners = await Winner.find().sort({ completedAt: -1 });
@@ -378,115 +396,54 @@ app.put("/api/bracket/vote", async (req, res) => {
       return res.status(400).json({ error: "Invalid vote" });
     }
 
-    // Get user IP (works in Azure)
     const userIP =
       req.headers["x-forwarded-for"]?.split(",")[0] ||
       req.socket.remoteAddress;
 
-    // Prevent duplicate votes
     if (matchup.voters.includes(userIP)) {
       return res.status(403).json({ error: "You already voted" });
     }
 
-    // Record vote
     const currentVotes = matchup.votes.get(choice) || 0;
     matchup.votes.set(choice, currentVotes + 1);
 
-    // Save voter IP
     matchup.voters.push(userIP);
 
     await bracket.save();
 
     res.json(bracket);
-
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
 /* =========================
-   MANUAL ADVANCE ROUND
+   MANUAL ADVANCE (OPTIONAL)
 ========================= */
+
 app.post("/api/bracket/advance", async (req, res) => {
   try {
-    const bracket = await Bracket.findOne();
+    let bracket = await Bracket.findOne();
 
     if (!bracket) {
       return res.status(404).json({ error: "No bracket found" });
     }
 
-    const winners = bracket.matchups.map((m) => {
-      const [a, b] = m.pair;
-
-      const aVotes = m.votes.get(a) || 0;
-      const bVotes = m.votes.get(b) || 0;
-
-      return aVotes >= bVotes ? a : b;
-    });
-
-    
-    if (winners.length === 1) {
-
-      // Prevent duplicates
-      const existing = await Winner.findOne({
-        topic: bracket.topic,
-        winner: winners[0]
-      });
-
-      if (!existing) {
-        await Winner.create({
-          topic: bracket.topic,
-          winner: winners[0]
-        });
-      }
-
-      bracket.tournamentEnded = true;
-      bracket.matchups = [{ pair: [winners[0]], votes: {} }];
-
-      await bracket.save();
-      return res.json(bracket);
-    }
-
-    
-    const nextRound = [];
-
-    for (let i = 0; i < winners.length; i += 2) {
-      const pair = [winners[i], winners[i + 1]];
-
-      nextRound.push({
-        pair,
-        votes: {
-          [pair[0]]: 0,
-          [pair[1]]: 0
-        }
-      });
-    }
-
-    bracket.matchups = nextRound;
-    bracket.currentRound += 1;
-    bracket.roundStart = new Date();
-
-    await bracket.save();
+    bracket = await advanceRoundIfNeeded(bracket);
 
     res.json(bracket);
-
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: "Failed to advance round" });
   }
 });
 
 /* =========================
-   RESET BRACKET
+   RESET
 ========================= */
 
 app.delete("/api/bracket/reset", async (req, res) => {
-
   await Bracket.deleteMany();
-
-  res.json({ message: "Bracket reset for March" });
-
+  res.json({ message: "Bracket reset" });
 });
 
 /* =========================
