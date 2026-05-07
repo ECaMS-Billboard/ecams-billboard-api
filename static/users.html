@@ -53,11 +53,18 @@
                 .then(data => {
                     const emailDiv = document.getElementById('email-data');
                     let html = '<ul>';
+                    // Doesn't generate a delete button for ecams email. 
                     data.forEach(email => {
+                        if(email.email != "ecamsbb@gmail.com"){
                         html += `<li>
                                     ${email.email}
                                     <button onclick="deleteEmail('${email._id}')">Delete</button>
-                                 </li>`;
+                                 </li>`;}
+                        else{
+                            html += `<li>
+                                    ${email.email}
+                                    </li>`;
+                        }
                     });
                     html += '</ul>';
                     emailDiv.innerHTML = html;
