@@ -16,6 +16,8 @@ import cron from 'node-cron';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const STALE_THRESHOLD_DAYS = process.env.STALE_THRESHOLD_DAYS || 30;
+
 // Load environment variables from .env file (if it exists), otherwise rely on environment variables (e.g. in Azure)
 const envPath = path.join(__dirname, '.env'); 
 if (fs.existsSync(envPath)) {
@@ -124,6 +126,11 @@ app.put('/api/admin/submissions/enabled', isAuthenticated, (req, res) => {
 // MongoURI - Ensure to use an environment variable for better security in production
 const MONGO_URI = process.env.MONGO_URI;
 
+if (!MONGO_URI) {
+    console.error("MONGO_URI is missing");
+    process.exit(1);
+}
+
 // Connect to MongoDB
 mongoose.connect(MONGO_URI, {
     useNewUrlParser: true,
@@ -159,14 +166,35 @@ const AllowedEmail = db.model(
 
 
 
+
+
+/* =========================
+   SCHEMAS
+========================= */
+
 const matchupSchema = new mongoose.Schema({
   pair: [String],
   votes: {
     type: Map,
     of: Number,
     default: {}
+  },
+  voters: {
+    type: [String],
+    default: []
   }
 });
+
+const winnerSchema = new mongoose.Schema({
+  topic: String,
+  winner: String,
+  completedAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+const Winner = mongoose.model("Winner", winnerSchema);
 
 const bracketSchema = new mongoose.Schema({
   topic: String,
@@ -188,21 +216,21 @@ const bracketSchema = new mongoose.Schema({
 const Bracket = mongoose.model("Bracket", bracketSchema);
 
 /* =========================
-   CREATE MARCH BRACKET
+   CREATE BRACKET
 ========================= */
 
-const createMarchBracket = async () => {
-
+const createBracket = async () => {
   const items = [
-    "Nachos",
-    "Pizza",
-    "Popcorn",
-    "Pretzels",
-    "Wings",
-    "Chips & Salsa",
-    "Mozzarella Sticks",
-    "Sliders"
+    "Lily",
+    "Tulip",
+    "Poppy",
+    "Daisy",
+    "Lilac",
+    "Sunflower",
+    "Peony",
+    "Rose"
   ];
+  
 
   const matchups = [];
 
@@ -221,7 +249,7 @@ const createMarchBracket = async () => {
   }
 
   const bracket = new Bracket({
-    topic: "Best March Madness Snacks",
+    topic: "Favorite Flower",
     currentRound: 0,
     matchups,
     roundStart: new Date(),
@@ -234,12 +262,13 @@ const createMarchBracket = async () => {
 };
 
 /* =========================
-   AUTO ADVANCE ROUND
+   ADVANCE ROUND
 ========================= */
 
 const advanceRoundIfNeeded = async (bracket) => {
 
   const now = new Date();
+
   const week = 7 * 24 * 60 * 60 * 1000;
 
   if (now - bracket.roundStart < week) return bracket;
@@ -255,15 +284,37 @@ const advanceRoundIfNeeded = async (bracket) => {
 
   });
 
+  /* =========================
+     TOURNAMENT FINISHED
+  ========================= */
+
   if (winners.length === 1) {
 
+    // Save winner (no duplicates)
+    const existing = await Winner.findOne({
+      topic: bracket.topic,
+      winner: winners[0]
+    });
+
+    if (!existing) {
+      await Winner.create({
+        topic: bracket.topic,
+        winner: winners[0]
+      });
+    }
+
+    // mark old bracket as finished
     bracket.tournamentEnded = true;
-    bracket.matchups = [{ pair: [winners[0]], votes: {} }];
-
     await bracket.save();
-    return bracket;
 
+    //CREATE NEW BRACKET 
+    const newBracket = await createBracket();
+    return newBracket;
   }
+
+  /* =========================
+     NEXT ROUND
+  ========================= */
 
   const nextRound = [];
 
@@ -302,7 +353,7 @@ app.get("/api/bracket", async (req, res) => {
     let bracket = await Bracket.findOne();
 
     if (!bracket) {
-      bracket = await createMarchBracket();
+      bracket = await createBracket();
     }
 
     bracket = await advanceRoundIfNeeded(bracket);
@@ -318,56 +369,87 @@ app.get("/api/bracket", async (req, res) => {
 });
 
 /* =========================
+   GET WINNERS (PAST BRACKETS)
+========================= */
+
+app.get("/api/bracket/winners", async (req, res) => {
+  try {
+    const winners = await Winner.find().sort({ completedAt: -1 });
+    res.json(winners);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* =========================
    VOTE
 ========================= */
 
 app.put("/api/bracket/vote", async (req, res) => {
-
   const { matchupIndex, choice } = req.body;
 
   try {
-
     const bracket = await Bracket.findOne();
-
     const matchup = bracket.matchups[matchupIndex];
 
-    const currentVotes = matchup.votes.get(choice) || 0;
+    if (!matchup || !matchup.pair.includes(choice)) {
+      return res.status(400).json({ error: "Invalid vote" });
+    }
 
+    const userIP =
+      req.headers["x-forwarded-for"]?.split(",")[0] ||
+      req.socket.remoteAddress;
+
+    if (matchup.voters.includes(userIP)) {
+      return res.status(403).json({ error: "You already voted" });
+    }
+
+    const currentVotes = matchup.votes.get(choice) || 0;
     matchup.votes.set(choice, currentVotes + 1);
+
+    matchup.voters.push(userIP);
 
     await bracket.save();
 
     res.json(bracket);
-
   } catch (err) {
-
     res.status(500).json({ error: err.message });
-
   }
-
 });
 
 /* =========================
-   RESET BRACKET
+   MANUAL ADVANCE (OPTIONAL)
+========================= */
+
+app.post("/api/bracket/advance", async (req, res) => {
+  try {
+    let bracket = await Bracket.findOne();
+
+    if (!bracket) {
+      return res.status(404).json({ error: "No bracket found" });
+    }
+
+    bracket = await advanceRoundIfNeeded(bracket);
+
+    res.json(bracket);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to advance round" });
+  }
+});
+
+/* =========================
+   RESET
 ========================= */
 
 app.delete("/api/bracket/reset", async (req, res) => {
-
   await Bracket.deleteMany();
-
-  res.json({ message: "Bracket reset for March" });
-
+  res.json({ message: "Bracket reset" });
 });
 
 /* =========================
    SERVER
 ========================= */
 
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
 // Authentication code
 // Passport configuration
 passport.use(new GoogleStrategy({
@@ -454,6 +536,12 @@ app.get('/admin', isAuthenticated, (req, res) => {
     res.sendFile(path.join(__dirname, 'static', 'layout.html'));
 });
 
+app.get('/bracket', isAuthenticated, (req, res) => {
+    res.sendFile(path.join(__dirname, 'static', 'bracket.html'));
+});
+
+
+
 
 // Configuration for file uploads
 const storage = multer.memoryStorage();
@@ -519,6 +607,10 @@ app.post('/add-professor', isAuthenticated, uploadProfessorImage.single('image')
         readableStream.push(null);
 
         // Upload the image to GridFS
+        if (!gfsBucket) {
+            return res.status(500).json({ error: "Storage not initialized yet" });
+        }
+
         const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
             contentType: req.file.mimetype,
         });
@@ -568,6 +660,10 @@ app.put('/edit-professor/:id', isAuthenticated, uploadProfessorImage.single('ima
             readableStream.push(null);
 
             // Upload the new image to GridFS
+            if (!gfsBucket) {
+                return res.status(500).json({ error: "Storage not initialized yet" });
+            }
+
             const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
                 contentType: req.file.mimetype,
             });
@@ -821,6 +917,10 @@ app.get('/image/:id', async (req, res) => {
             return res.status(404).json({ error: `File not found: ${id}` });
         }
 
+        if (!gfsBucket) {
+            return res.status(500).json({ error: "Storage not initialized yet" });
+        }
+        
         const readStream = gfsBucket.openDownloadStream(file._id);
         res.set('Content-Type', file.contentType);
         readStream.pipe(res);
@@ -965,20 +1065,22 @@ app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
 
 // This is for approving slides
 app.put('/approve-slide/:id', isAuthenticated, async (req, res) => {
-  try {
-      const { id } = req.params;
-      const { approvedBy = '' } = req.body;
+    try {
+        const { id } = req.params;
+        const { approvedBy = '' } = req.body;
 
-      const slide = await db.collection('Slides').updateOne(
-          { fileId: new mongoose.Types.ObjectId(id) },
-          { $set: { approved: true, approvedBy: approvedBy } }
-      );
+        const result = await db.collection('Slides').updateOne(
+            { fileId: new mongoose.Types.ObjectId(id) },
+            {
+                $set: {
+                    approved: true,
+                    approvedBy: approvedBy,
+                    approvedAt: new Date()
+                }
+            }
+        );
 
-      if (!slide.matchedCount) {
-          return res.status(404).json({ error: 'Slide not found' });
-      }
-
-        if (!slide.matchedCount) {
+        if (result.matchedCount === 0) {
             return res.status(404).json({ error: 'Slide not found' });
         }
 
@@ -1082,6 +1184,8 @@ app.post('/reorder-slides', isAuthenticated, async (req, res) => {
         res.status(500).json({ error: 'Internal server error', details: error.message });
    }
 });
+
+
 
 // Custom 404 page
 app.use((req, res) => {

@@ -3,29 +3,28 @@
 /*
 Handles all file uploads from the frontend (/upload endpoint).
 This version includes input sanitization, detailed error messages,
-and strict control over file types and size limits.
-
-Checks supplied 
-Although with that being said, this input sanitisation is still incomplete.
-
-VULNERABILITIES: (From what I know of)
-
-1. No tracking of who uploads what or any timestamps
-
-2. Anyone can upload infinite times
- */
+strict control over file types and size limits, uploader email,
+and upload/submission date tracking.
+*/
 
 import express from 'express';
 import multer from 'multer';
 import { Readable } from 'stream';
-import crypto from 'crypto';
 
 const router = express.Router();
 
-const express = require('express');
-const multer = require('multer');
-const { Readable } = require('stream');
-const router = express.Router();
+// Middleware to block uploads when disabled
+function checkSubmissionsEnabled(req, res, next) {
+  const getFlag = req.app.locals.getSubmissionsEnabled;
+
+  if (typeof getFlag === 'function' && !getFlag()) {
+    return res.status(503).json({
+      error: 'Flyer submissions are currently disabled by an administrator.'
+    });
+  }
+
+  next();
+}
 
 // Multer setup — store files in memory and validate on upload
 const storage = multer.memoryStorage();
@@ -60,14 +59,13 @@ function validateMagicNumber(req, res, next) {
   // PNG signature: 0x89 0x50 0x4E 0x47
   const isPNG = b0 === 0x89 && b1 === 0x50 && b2 === 0x4e && b3 === 0x47;
 
-  // JPEG signature: 0xFF 0xD8 0xFF (first three bytes)
+  // JPEG signature: 0xFF 0xD8 0xFF
   const isJPG = b0 === 0xff && b1 === 0xd8 && b2 === 0xff;
 
   if (!isPNG && !isJPG) {
-    return res.status(400).json({ error: 'Invalid file signature (not a real PNG/JPEG).' });
+    return res.status(400).json({ error: 'Invalid file signature. Only real PNG/JPEG files are allowed.' });
   }
 
-  // attach detected ext/mime for downstream
   req.detectedExt = isPNG ? '.png' : '.jpg';
   req.detectedMime = isPNG ? 'image/png' : 'image/jpeg';
 
@@ -75,7 +73,6 @@ function validateMagicNumber(req, res, next) {
 }
 
 function sanitizeFilename(originalName = '') {
-  // Replace anything not alnum, dot, underscore, hyphen with underscore
   return String(originalName).replace(/[^\w.\-]/g, '_');
 }
 
@@ -83,93 +80,105 @@ router.post(
   '/',
   checkSubmissionsEnabled,
   (req, res, next) => {
-    console.log('--- Upload request received ---');
-    console.log('Body:', req.body);
-    console.log('Headers:', req.headers);
-    console.log('File present before multer?', req.file);
+    upload.single('file')(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'File too large. Max size is 5 MB.' });
+        }
 
-  upload.single('file')(req, res, (err) => {
-    if (err instanceof multer.MulterError) {
-      if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ error: 'File too large. Max size is 5 MB.' });
-      }
-      return res.status(400).json({ error: `Upload error: ${err.message}` });
-    } else if (err && err.message === 'INVALID_FILE_TYPE') {
-      return res.status(400).json({ error: 'Invalid file type. Only PNG and JPEG are allowed.' });
-    } else if (err) {
-      return res.status(500).json({ error: 'Unexpected upload error.', details: err.message });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded.' });
-    }
-
-    next();
-  });
-}, async (req, res) => {
-  const db = req.app.locals.db;
-  const gfsBucket = req.app.locals.gfsBucket;
-  console.log('db present?', !!db);
-  console.log('gfsBucket present?', !!gfsBucket);
-
-  if (!db || !gfsBucket) {
-    console.error('Database or GridFSBucket not initialized yet.');
-    return res.status(500).json({ error: 'Database not ready. Please try again later.' });
-  }
-
-  try {
-    const { description = '', notes = '', email = '' } = req.body;
-
-    const sanitizedFilename = req.file.originalname.replace(/[^\w.\-]/g, '_');
-
-    const readableStream = new Readable();
-    readableStream.push(req.file.buffer);
-    readableStream.push(null);
-
-    const uploadStream = gfsBucket.openUploadStream(sanitizedFilename, {
-      contentType: req.file.mimetype,
-    });
-
-    readableStream.pipe(uploadStream);
-
-    uploadStream.on('finish', async () => {
-      const file = await db.collection('slides.files').findOne({ filename: sanitizedFilename });
-      console.log('GridFS upload finished for file:', sanitizedFilename);
-
-      if (!file) {
-        return res.status(500).json({ error: 'File upload failed unexpectedly.' });
+        return res.status(400).json({ error: `Upload error: ${err.message}` });
       }
 
-      await db.collection('Slides').insertOne({
-        filename: file.filename,
-        contentType: file.contentType,
-        length: file.length,
-        uploadDate: file.uploadDate,
-        fileId: file._id,
-        description,
-        department: 'N/A',
-        notes,
-        email,
-        approved: false,
-        approvedBy: '',
-        displayOrder: 0,
+      if (err && err.message === 'INVALID_FILE_TYPE') {
+        return res.status(400).json({ error: 'Invalid file type. Only PNG and JPEG are allowed.' });
+      }
+
+      if (err) {
+        return res.status(500).json({ error: 'Unexpected upload error.', details: err.message });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded.' });
+      }
+
+      next();
+    });
+  },
+  validateMagicNumber,
+  async (req, res) => {
+    const db = req.app.locals.db;
+    const gfsBucket = req.app.locals.gfsBucket;
+
+    if (!db || !gfsBucket) {
+      console.error('Database or GridFSBucket not initialized yet.');
+      return res.status(500).json({ error: 'Database not ready. Please try again later.' });
+    }
+
+    try {
+      const {
+        description = '',
+        notes = '',
+        email = ''
+      } = req.body;
+
+      const submittedAt = new Date();
+
+      const sanitizedOriginal = sanitizeFilename(req.file.originalname || 'upload');
+
+      // Strip user extension and force the detected extension
+      const base = sanitizedOriginal.replace(/\.[^.]*$/, '') || 'file';
+      const finalFilename = `${base}${req.detectedExt}`;
+
+      const readableStream = new Readable();
+      readableStream.push(req.file.buffer);
+      readableStream.push(null);
+
+      const uploadStream = gfsBucket.openUploadStream(finalFilename, {
+        contentType: req.detectedMime,
       });
 
-      return res.status(201).json({
-        message: 'Image uploaded successfully.',
-        metadata: {
-          filename: sanitizedFilename,
-          email,
-          approved: false,
-          approvedBy: '',
-        },
-      });
-    });
+      readableStream.pipe(uploadStream);
 
-    uploadStream.on('error', (err) => {
-      console.error('GridFS upload error:', err);
-      res.status(500).json({ error: 'Failed to upload image.', details: err.message });
-    });
+      uploadStream.on('finish', async () => {
+        try {
+          const file = await db.collection('slides.files').findOne({ filename: finalFilename });
+
+          if (!file) {
+            return res.status(500).json({ error: 'Image upload failed' });
+          }
+
+          await db.collection('Slides').insertOne({
+            filename: file.filename,
+            contentType: file.contentType,
+            length: file.length,
+            uploadDate: file.uploadDate,
+            submittedAt: submittedAt,
+            fileId: file._id,
+            description: description,
+            department: 'N/A',
+            notes: notes,
+            email: email,
+            approved: false,
+            approvedBy: '',
+            displayOrder: 0,
+          });
+
+          return res.status(201).json({
+            file,
+            message: 'Image uploaded successfully',
+            metadata: {
+              description,
+              email,
+              approved: false,
+              approvedBy: '',
+              submittedAt: submittedAt
+            }
+          });
+        } catch (e) {
+          console.error('Error after GridFS finish:', e);
+          return res.status(500).json({ error: 'Failed to save metadata', details: e.message });
+        }
+      });
 
       uploadStream.on('error', (err) => {
         console.error('Upload failed:', err);
@@ -181,4 +190,5 @@ router.post(
     }
   }
 );
+
 export default router;
