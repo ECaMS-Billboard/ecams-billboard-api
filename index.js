@@ -1014,7 +1014,7 @@ app.get('/list-approved-images', async (req, res) => {
                 approved: true,
                 archived: { $ne: true }
             })
-            .toArray();
+            .sort({ displayOrder: 1, submittedAt: -1 }).toArray();
 
         res.json(slides);
 
