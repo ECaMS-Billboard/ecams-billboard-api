@@ -114,6 +114,14 @@
                                     <p>Status: ${slide.approved ? 'Approved' : 'Pending'}</p>
                                     <p>Uploaded by: ${slide.email ? slide.email : 'N/A'}</p>
                                     <p>Approved by: ${slide.approvedBy ? slide.approvedBy : 'N/A'}</p>
+                                     <div style="margin: 10px 0; display: flex; gap: 10px; justify-content: center;">
+                                        <button onclick="moveSlide('${slide.fileId}', 'up')"
+                                        style="padding: 5px 10px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                        ▲ Up </button>
+                                        <button onclick="moveSlide('${slide.fileId}', 'down')"
+                                        style="padding: 5px 10px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                        ▼ Down </button>
+                                     </div>
                                     <button onclick="changeDepartment('${slide.fileId}')">Change Department</button>
                                     <button onclick="approveSlide('${slide.fileId}')">Approve</button>
                                     <button onclick="declineSlide('${slide.fileId}')">Decline</button>
@@ -199,7 +207,7 @@
                 await fetchSlides();
                 document.getElementById('add-slide-form').reset();
                 uploadMessage.innerText = 'Poster submitted successfully. It is now pending approval.';
-            })
+            }) 
             .catch(err => {
                 console.error('Failed to upload slide:', err);
                 uploadMessage.innerText = 'Upload failed. Please try again.';
@@ -270,6 +278,82 @@
                     console.error('Failed to change department:', err);
                 });
             }
+        }
+
+                // move up/down by file ID, calls save function at end. has some logic
+        // to make sure it doesnt mess with ends
+        async function moveSlide(fileId, direction) {
+            const list = document.querySelector('#slides-data ul');
+            if (!list) return;
+
+            const items = Array.from(list.children);
+
+
+            const currentIndex = items.findIndex(li =>
+                li.querySelector(`img[src*="/${fileId}"]`)
+            );
+
+            if (currentIndex === -1) return;
+
+
+            const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+
+            if (newIndex < 0 || newIndex >= items.length) return;
+
+
+            const itemToMove = items[currentIndex];
+            const targetItem = items[newIndex];
+
+            if (direction === 'up') {
+                list.insertBefore(itemToMove, targetItem);
+            } else {
+                list.insertBefore(targetItem, itemToMove);
+            }
+
+
+            await saveNewOrder();
+        }
+
+
+
+        // Hopefully saves the currentorder into the backend?
+        async function saveNewOrder() {
+            const list = document.querySelector('#slides-data ul');
+            if (!list) return;
+
+
+            const orderedIds = Array.from(list.children).map(li => {
+                const img = li.querySelector('img');
+                return img.src.split('/').pop().split('?')[0];
+            });
+
+            try {
+                const res = await fetch('/reorder-slides', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        order: orderedIds.map((id, index) => ({
+                            fileId: id,
+                            displayOrder: index
+                        }))
+                    })
+                });
+
+                if (!res.ok) throw new Error('Failed to save order');
+
+               // success message... yay
+                const msg = document.getElementById('upload-message');
+                msg.innerText = 'Order update success';
+                msg.style.color = 'green';
+                setTimeout(() => { msg.innerText = ''; msg.style.color = ''; }, 2000);
+
+            } catch (err) {
+                console.error('Order save failed:', err);
+                alert('Error saving order. Refreshing list.');
+                fetchSlides(); // Reload to reset if failed
+           }
         }
 
         fetchSlides();

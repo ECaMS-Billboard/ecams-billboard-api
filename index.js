@@ -833,7 +833,7 @@ app.get('/image/:id', async (req, res) => {
 
 app.get('/list-images', async (req, res) => {
     try {
-        const slides = await db.collection('Slides').find().toArray();
+        const slides = await db.collection('Slides').find().sort({ displayOrder: 1, submittedAt: -1 }).toArray();
 
         if (!slides || slides.length === 0) {
             return res.status(404).json({ message: 'No images found.' });
@@ -1044,6 +1044,44 @@ app.put('/edit-department/:id', isAuthenticated, async (req, res) => {
     }
 });
 
+
+app.post('/reorder-slides', isAuthenticated, async (req, res) => {
+    try {
+        const { order } = req.body;
+
+        if (!Array.isArray(order) || order.length === 0) {
+            return res.status(400).json({ error: 'Invalid order data' });
+        }
+
+        const slidesCollection = db.collection('Slides');
+
+        for (const item of order) {
+            const fileIdString = item.fileId?.trim();
+            if (!fileIdString) {
+                console.error(`Invalid or missing fileId:`, item.fileId);
+                continue;
+            }
+
+            if (!mongoose.Types.ObjectId.isValid(fileIdString)) {
+                console.error(`Invalid ObjectId format: ${fileIdString}`);
+                continue;
+            }
+
+            const objectId = new mongoose.Types.ObjectId(fileIdString);
+
+            await slidesCollection.updateOne(
+                { fileId: objectId },
+                { $set: { displayOrder: item.displayOrder } }
+            );
+        }
+
+        res.json({ success: true, message: 'Reordering complete' });
+
+    } catch (error) {
+        console.error('Error in /reorder-slides:', error);
+        res.status(500).json({ error: 'Internal server error', details: error.message });
+   }
+});
 
 // Custom 404 page
 app.use((req, res) => {
