@@ -160,6 +160,7 @@ router.post(
             email: email,
             approved: false,
             approvedBy: '',
+            displayOrder: 0,
           });
 
           return res.status(201).json({
