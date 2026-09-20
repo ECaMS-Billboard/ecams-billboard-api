@@ -21,7 +21,7 @@ function checkSubmissionsEnabled(req, res, next) {
     return res.status(503).json({
       error: 'Flyer submissions are currently disabled by an administrator.'
     });
-  }
+  } 
 
   next();
 }
@@ -118,8 +118,16 @@ router.post(
       const {
         description = '',
         notes = '',
-        email = ''
+        email = '',
+        expiresAt = null
       } = req.body;
+
+      const parsedExpiry = expiresAt 
+    ? new Date(expiresAt + 'T23:59:59') 
+    : null;
+
+    
+
 
       const submittedAt = new Date();
 
@@ -161,6 +169,7 @@ router.post(
             approved: false,
             approvedBy: '',
             displayOrder: 0,
+            expiresAt: parsedExpiry,
           });
 
           return res.status(201).json({

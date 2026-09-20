@@ -91,6 +91,10 @@
                 accept="image/*"
                 required
             >
+            
+            <label for="expiry-date" style="margin-right:5px;">Expires on:</label>
+            <input type="date" id="expiry-date">
+            
             <button type="submit">Add Slide</button>
         </form>
 
@@ -175,6 +179,7 @@
                                     <p>Status: ${slide.approved ? 'Approved' : 'Pending'}</p>
                                     <p>Uploaded by: ${slide.email ? slide.email : 'N/A'}</p>
                                     <p>Submitted at: ${formatDate(slide.submittedAt || slide.uploadDate)}</p>
+                                    <p>Expires: ${slide.expiresAt ? formatDate(slide.expiresAt) : 'Never'}</p>
                                     <p>Approved by: ${slide.approvedBy ? slide.approvedBy : 'N/A'}</p>
                                      <div style="margin: 10px 0; display: flex; gap: 10px; justify-content: center;">
                                         <button onclick="moveSlide('${slide.fileId}', 'up')"
@@ -259,7 +264,7 @@
             const uploadMessage = document.getElementById('upload-message');
             const email = document.getElementById('submitter-email').value;
             const file = document.getElementById('slide-file').files[0];
-
+            const expiryDate = document.getElementById('expiry-date').value;
             if (!file) {
                 return;
             }
@@ -267,6 +272,7 @@
             const formData = new FormData();
             formData.append('file', file);
             formData.append('email', email);
+            formData.append('expiresAt', expiryDate);
 
             try {
                 const res = await fetch('/upload', {
