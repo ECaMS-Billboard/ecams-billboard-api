@@ -172,6 +172,10 @@
                     let html = '<ul>';
 
                     data.forEach(slide => {
+
+                         const rawExpiry = slide.expiresAt ? new Date(slide.expiresAt).toISOString().slice(0, 10) : '';
+                         const shownExpiry = slide.expiresAt ? formatDate(slide.expiresAt) : 'Never';
+
                         html += `<li>
                                     <img src="/image/${slide.fileId}" alt="${slide.filename}">
                                     <p><strong>${slide.filename}</strong></p>
