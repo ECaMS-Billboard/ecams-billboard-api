@@ -179,8 +179,7 @@
                                     <p>Status: ${slide.approved ? 'Approved' : 'Pending'}</p>
                                     <p>Uploaded by: ${slide.email ? slide.email : 'N/A'}</p>
                                     <p>Submitted at: ${formatDate(slide.submittedAt || slide.uploadDate)}</p>
-                                    <p>Expires: <span id="expiry-${slide.fileId}" data-raw="$
-                                        {slide.expiresAt ? slide.expiresAt.slice(0, 10) : ''}">${slide.expiresAt ? formatDate(slide.expiresAt) : 'Never'}</span></p>
+                                    <p>Expires: <span id="expiry-${slide.fileId}">${shownExpiry}</span></p>
                                     <p>Approved by: ${slide.approvedBy ? slide.approvedBy : 'N/A'}</p>
                                      <div style="margin: 10px 0; display: flex; gap: 10px; justify-content: center;">
                                         <button onclick="moveSlide('${slide.fileId}', 'up')"
@@ -194,7 +193,7 @@
                                     <button onclick="approveSlide('${slide.fileId}')">Approve</button>
                                     <button onclick="declineSlide('${slide.fileId}')">Decline</button>
                                     <button onclick="deleteSlide('${slide.fileId}')">Archive</button>
-                                    <button onclick="editExpiry('${slide.fileId}')">Edit Expiry Date</button>
+                                    <button onclick="editExpiry('${slide.fileId}', '${rawExpiry}')">Edit Expiry</button>
                                  </li>`;
                     });
 
@@ -419,36 +418,56 @@
             await saveNewOrder();
         }
 
-        function editExpiry(id) {
-            const current = document.getElementById(`expiry-${id}`)?.dataset.raw || '';
-            const newDate = prompt('New expiry date (YYYY-MM-DD). Leave blank for "Never":', current);
+       function editExpiry(id, current) {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
 
-            if (newDate === null) return; // cancelled
+            const box = document.createElement('div');
+            box.style.cssText = 'background:#fff;padding:20px;border-radius:8px;text-align:center;';
 
-            fetch(`/edit-expiry/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ expiresAt: newDate || null })
-            })
-            .then(async res => {
-                if (!res.ok) {
-                    const body = await res.json().catch(() => ({}));
-                    throw new Error(body?.error || `Update failed: ${res.status}`);
-                }
-                return res.json();
-            })
-            .then(data => {
-                const span = document.getElementById(`expiry-${id}`);
-                span.textContent = data.expiresAt ? formatDate(data.expiresAt) : 'Never';
-                fetchSlides();
-            })
-            .catch(err => {
-                console.error('Failed to update expiry:', err);
-                alert('Failed to update expiry date.');
-            });
-}
+            const dateInput = document.createElement('input');
+            dateInput.type = 'date';
+            if (current) dateInput.value = current;
 
+            const saveBtn = document.createElement('button');
+            saveBtn.textContent = 'Save';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel';
+
+            box.innerHTML = '<label>Select new expiry date:</label><br>';
+            box.appendChild(dateInput);
+            box.appendChild(saveBtn);
+            box.appendChild(cancelBtn);
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+
+            cancelBtn.onclick = () => document.body.removeChild(overlay);
+
+            saveBtn.onclick = () => {
+                const newDate = dateInput.value || null;
+                document.body.removeChild(overlay);
+
+                fetch('/edit-expiry/' + id, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ expiresAt: newDate })
+                })
+                .then(async res => {
+                    if (!res.ok) {
+                        const body = await res.json().catch(() => ({}));
+                        throw new Error(body?.error || 'Update failed: ' + res.status);
+                    }
+                    return res.json();
+                })
+                .then(() => fetchSlides())
+                .catch(err => {
+                    console.error('Failed to update expiry:', err);
+                    alert('Failed to update expiry date.');
+                });
+            };
+        }
 
         // Hopefully saves the currentorder into the backend?
         async function saveNewOrder() {
