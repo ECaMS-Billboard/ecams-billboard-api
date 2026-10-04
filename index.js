@@ -1176,6 +1176,47 @@ app.put('/edit-department/:id', isAuthenticated, async (req, res) => {
 });
 
 
+app.put('/edit-expiry/:id', isAuthenticated, async (req, res) => {
+    const { id } = req.params;
+    let { expiresAt } = req.body;
+
+    try {
+        let parsedExpiry = null;
+
+        if (expiresAt) {
+            if (typeof expiresAt === 'number') {
+                parsedExpiry = new Date(expiresAt);
+            } else if (/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
+                parsedExpiry = new Date(expiresAt + 'T23:59:59-08:00'); // adjust TZ
+            } else {
+                return res.status(400).json({ error: 'Invalid date format' });
+            }
+        }
+
+        if (parsedExpiry && isNaN(parsedExpiry.getTime())) {
+            return res.status(400).json({ error: 'Invalid date' });
+        }
+
+        const result = await db.collection('Slides').updateOne(
+            { fileId: new mongoose.Types.ObjectId(id) },
+            { $set: { expiresAt: parsedExpiry } }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).json({ error: 'Slide not found' });
+        }
+
+        res.json({
+            message: 'Expiry updated successfully',
+            expiresAt: parsedExpiry ? parsedExpiry.toISOString() : null
+        });
+    } catch (err) {
+        console.error('Failed to update expiry:', err);
+        res.status(500).json({ error: 'Failed to update expiry' });
+    }
+});
+
+
 app.post('/reorder-slides', isAuthenticated, async (req, res) => {
     try {
         const { order } = req.body;
