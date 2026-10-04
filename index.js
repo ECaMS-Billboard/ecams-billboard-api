@@ -938,6 +938,7 @@ app.get('/list-images', async (req, res) => {
         const allSlides = await db.collection('Slides').find().toArray();
         const now1 = new Date();
 
+
         for (const slide of allSlides) {
             // if statement to grab slides that are expired
             if (slide.expiresAt && new Date(slide.expiresAt) < now1 && !slide.archivedAt) {
