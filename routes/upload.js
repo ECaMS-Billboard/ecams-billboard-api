@@ -119,7 +119,7 @@ router.post(
         description = '',
         notes = '',
         email = '',
-        expiresAt = null
+        expiresAt =  Date.now() + 70 * 24 * 60 * 60 * 1000
       } = req.body;
 
       const parsedExpiry = expiresAt 
