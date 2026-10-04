@@ -179,7 +179,8 @@
                                     <p>Status: ${slide.approved ? 'Approved' : 'Pending'}</p>
                                     <p>Uploaded by: ${slide.email ? slide.email : 'N/A'}</p>
                                     <p>Submitted at: ${formatDate(slide.submittedAt || slide.uploadDate)}</p>
-                                    <p>Expires: ${slide.expiresAt ? formatDate(slide.expiresAt) : 'Never'}</p>
+                                    <p>Expires: <span id="expiry-${slide.fileId}" data-raw="$
+                                        {slide.expiresAt ? slide.expiresAt.slice(0, 10) : ''}">${slide.expiresAt ? formatDate(slide.expiresAt) : 'Never'}</span></p>
                                     <p>Approved by: ${slide.approvedBy ? slide.approvedBy : 'N/A'}</p>
                                      <div style="margin: 10px 0; display: flex; gap: 10px; justify-content: center;">
                                         <button onclick="moveSlide('${slide.fileId}', 'up')"
@@ -193,6 +194,7 @@
                                     <button onclick="approveSlide('${slide.fileId}')">Approve</button>
                                     <button onclick="declineSlide('${slide.fileId}')">Decline</button>
                                     <button onclick="deleteSlide('${slide.fileId}')">Archive</button>
+                                    <button onclick="editExpiry('${slide.fileId}')">Edit Expiry Date</button>
                                  </li>`;
                     });
 
@@ -417,6 +419,35 @@
             await saveNewOrder();
         }
 
+        function editExpiry(id) {
+            const current = document.getElementById(`expiry-${id}`)?.dataset.raw || '';
+            const newDate = prompt('New expiry date (YYYY-MM-DD). Leave blank for "Never":', current);
+
+            if (newDate === null) return; // cancelled
+
+            fetch(`/edit-expiry/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ expiresAt: newDate || null })
+            })
+            .then(async res => {
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body?.error || `Update failed: ${res.status}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                const span = document.getElementById(`expiry-${id}`);
+                span.textContent = data.expiresAt ? formatDate(data.expiresAt) : 'Never';
+                fetchSlides();
+            })
+            .catch(err => {
+                console.error('Failed to update expiry:', err);
+                alert('Failed to update expiry date.');
+            });
+}
 
 
         // Hopefully saves the currentorder into the backend?
@@ -465,6 +496,7 @@
         window.restoreSlide = restoreSlide;
         window.fetchSlides = fetchSlides;
         window.fetchArchivedSlides = fetchArchivedSlides;
+        window.editExpiry = editExpiry;
 
         function setDefaultExpiry() {
             const input = document.getElementById('expiry-date');
