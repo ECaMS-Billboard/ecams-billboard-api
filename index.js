@@ -1078,6 +1078,10 @@ app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
         delete archivedSlide._id;
         delete archivedSlide.archivedAt;
         delete archivedSlide.archivedBy;
+        delete archivedSlide.archiveReason;
+        delete archivedSlide.declineReason;
+
+        archivedSlide.expiresAt = null;
 
         await db.collection('Slides').insertOne(archivedSlide);
 

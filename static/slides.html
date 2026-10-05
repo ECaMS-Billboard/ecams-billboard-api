@@ -245,7 +245,7 @@
                 });
         }
 
-        function restoreSlide(id) {
+       function restoreSlide(id) {
             if (!confirm('Restore this slide?')) {
                 return;
             }
@@ -254,7 +254,10 @@
                 method: 'POST',
                 credentials: 'include'
             })
-            .then(() => fetchArchivedSlides())
+            .then(() => {
+                editExpiry(id, '');
+                fetchArchivedSlides();
+            })
             .catch(err => console.error('Failed to restore slide:', err));
         }
 
