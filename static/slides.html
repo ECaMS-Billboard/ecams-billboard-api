@@ -91,7 +91,8 @@
                 accept="image/*"
                 required
             >
-            
+            <label for="event-date" style="margin-right:5px;">Event date:</label>
+            <input type="date" id="event-date">
             <label for="expiry-date" style="margin-right:5px;">Expires on:</label>
             <input type="date" id="expiry-date">
             
@@ -183,6 +184,7 @@
                                     <p>Status: ${slide.approved ? 'Approved' : 'Pending'}</p>
                                     <p>Uploaded by: ${slide.email ? slide.email : 'N/A'}</p>
                                     <p>Submitted at: ${formatDate(slide.submittedAt || slide.uploadDate)}</p>
+                                    <p>Event Date: ${slide.eventDate ? new Date(slide.eventDate).toLocaleDateString() : 'N/A'}</p>
                                     <p>Expires: <span id="expiry-${slide.fileId}">${shownExpiry}</span></p>
                                     <p>Approved by: ${slide.approvedBy ? slide.approvedBy : 'N/A'}</p>
                                      <div style="margin: 10px 0; display: flex; gap: 10px; justify-content: center;">
@@ -269,6 +271,7 @@
             const uploadMessage = document.getElementById('upload-message');
             const email = document.getElementById('submitter-email').value;
             const file = document.getElementById('slide-file').files[0];
+            const eventDate = document.getElementById('event-date').value;
             const expiryDate = document.getElementById('expiry-date').value;
             if (!file) {
                 return;
@@ -277,6 +280,7 @@
             const formData = new FormData();
             formData.append('file', file);
             formData.append('email', email);
+            formData.append('eventDate', eventDate);
             formData.append('expiresAt', expiryDate);
 
             try {
