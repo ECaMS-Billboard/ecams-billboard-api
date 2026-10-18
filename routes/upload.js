@@ -21,7 +21,7 @@ function checkSubmissionsEnabled(req, res, next) {
     return res.status(503).json({
       error: 'Flyer submissions are currently disabled by an administrator.'
     });
-  }
+  } 
 
   next();
 }
@@ -118,9 +118,27 @@ router.post(
       const {
         description = '',
         notes = '',
-        email = ''
+        email = '',
+        eventDate = '',
+        expiresAt = Date.now() + 70 * 24 * 60 * 60 * 1000
       } = req.body;
 
+      let parsedExpiry;
+
+      if (typeof expiresAt === 'number') {
+        parsedExpiry = new Date(expiresAt);
+      } else if (expiresAt && /^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
+        parsedExpiry = new Date(expiresAt + 'T23:59:59-08:00');
+      } else {
+        parsedExpiry = new Date(Date.now() + 70 * 24 * 60 * 60 * 1000);
+      }
+
+      // someone can fix this mess if they want at some point. I think this should work. This is needed because the API slide submission and user slide submission are a bit different
+      if (!parsedExpiry || isNaN(parsedExpiry.getTime())) {
+        parsedExpiry = new Date(Date.now() + 70 * 24 * 60 * 60 * 1000);
+      }
+
+      const parsedEventDate = eventDate ? new Date(eventDate + 'T00:00:00') : null;
       const submittedAt = new Date();
 
       const sanitizedOriginal = sanitizeFilename(req.file.originalname || 'upload');
@@ -152,15 +170,17 @@ router.post(
             contentType: file.contentType,
             length: file.length,
             uploadDate: file.uploadDate,
-            submittedAt: submittedAt,
+            submittedAt,
             fileId: file._id,
-            description: description,
+            description,
             department: 'N/A',
-            notes: notes,
-            email: email,
+            notes,
+            email,
+            eventDate: parsedEventDate,
             approved: false,
             approvedBy: '',
             displayOrder: 0,
+            expiresAt: parsedExpiry,
           });
 
           return res.status(201).json({
@@ -168,10 +188,12 @@ router.post(
             message: 'Image uploaded successfully',
             metadata: {
               description,
+              notes,
               email,
+              eventDate: parsedEventDate,
               approved: false,
               approvedBy: '',
-              submittedAt: submittedAt
+              submittedAt
             }
           });
         } catch (e) {

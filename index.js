@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
-
+import dns from 'dns';
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
@@ -933,7 +934,35 @@ app.get('/image/:id', async (req, res) => {
 
 app.get('/list-images', async (req, res) => {
     try {
-        const slides = await db.collection('Slides').find().sort({ displayOrder: 1, submittedAt: -1 }).toArray();
+
+        const allSlides = await db.collection('Slides').find().toArray();
+        const now1 = new Date();
+
+
+        for (const slide of allSlides) {
+            // if statement to grab slides that are expired
+            if (slide.expiresAt && new Date(slide.expiresAt) < now1 && !slide.archivedAt) {
+                
+                console.log(`Auto-archiving expired slide: ${slide.filename}`);
+
+                // duplicates it and archives it if its expired 
+                const archivedSlide = { ...slide };
+                delete archivedSlide._id; // Let Mongo generate a new _id
+                
+                archivedSlide.archivedAt = now1;
+                archivedSlide.archiveReason = 'expired';
+
+                await db.collection('ArchivedSlides').insertOne(archivedSlide);
+
+                // removes slide
+                await db.collection('Slides').deleteOne({ fileId: slide.fileId });
+            }
+}
+
+        const slides = await db.collection('Slides')
+            .find({ archivedAt: null })
+            .sort({ displayOrder: 1, submittedAt: -1 })
+            .toArray();
 
         if (!slides || slides.length === 0) {
             return res.status(404).json({ message: 'No images found.' });
@@ -1173,6 +1202,47 @@ app.put('/edit-department/:id', isAuthenticated, async (req, res) => {
     } catch (err) {
         console.error('Failed to update department:', err);
         res.status(500).json({ error: 'Failed to update department' });
+    }
+});
+
+
+app.put('/edit-expiry/:id', isAuthenticated, async (req, res) => {
+    const { id } = req.params;
+    let { expiresAt } = req.body;
+
+    try {
+        let parsedExpiry = null;
+
+        if (expiresAt) {
+            if (typeof expiresAt === 'number') {
+                parsedExpiry = new Date(expiresAt);
+            } else if (/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
+                parsedExpiry = new Date(expiresAt + 'T23:59:59-08:00'); // adjust TZ
+            } else {
+                return res.status(400).json({ error: 'Invalid date format' });
+            }
+        }
+
+        if (parsedExpiry && isNaN(parsedExpiry.getTime())) {
+            return res.status(400).json({ error: 'Invalid date' });
+        }
+
+        const result = await db.collection('Slides').updateOne(
+            { fileId: new mongoose.Types.ObjectId(id) },
+            { $set: { expiresAt: parsedExpiry } }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).json({ error: 'Slide not found' });
+        }
+
+        res.json({
+            message: 'Expiry updated successfully',
+            expiresAt: parsedExpiry ? parsedExpiry.toISOString() : null
+        });
+    } catch (err) {
+        console.error('Failed to update expiry:', err);
+        res.status(500).json({ error: 'Failed to update expiry' });
     }
 });
 
