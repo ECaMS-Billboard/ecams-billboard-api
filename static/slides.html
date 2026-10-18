@@ -223,6 +223,7 @@
                                 <p>Approved by: ${slide.approvedBy ? slide.approvedBy : 'N/A'}</p>
                                 <p>Archived at: ${formatDate(slide.archivedAt)}</p>
                                 <button onclick="restoreSlide('${slide.fileId}')">Restore</button>
+                                <button onclick="permanentlyDeleteSlide('${slide.fileId}')">Delete Permanently</button>
                             </li>
                         `;
                     });
@@ -295,6 +296,28 @@
                 uploadMessage.innerText = 'Upload failed. See console for details.';
             }
         });
+
+        function permanentlyDeleteSlide(id) {
+            fetch(`/delete-slide-permanent/${id}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            })
+            .then(async res => {
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body?.error || `Delete failed: ${res.status}`);
+                }
+                return res.json();
+            })
+            .then(() => {
+                fetchArchivedSlides();
+            })
+            .catch(err => {
+                console.error('Failed to permanently delete slide:', err);
+                alert('Failed to permanently delete slide.');
+            });
+        }
+
 
         function approveSlide(id) {
             const approverName = prompt('Enter your name:');
@@ -452,6 +475,8 @@
            }
         }
 
+        
+        window.permanentlyDeleteSlide = permanentlyDeleteSlide;
         window.approveSlide = approveSlide;
         window.declineSlide = declineSlide;
         window.deleteSlide = deleteSlide;
