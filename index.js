@@ -1037,6 +1037,26 @@ app.get('/list-archived', isAuthenticated, async (req, res) => {
 });
 
 app.get('/list-approved-images', async (req, res) => {
+    for (const slide of allSlides) {
+            // if statement to grab slides that are expired
+            if (slide.expiresAt && new Date(slide.expiresAt) < now1 && !slide.archivedAt) {
+                
+                console.log(`Auto-archiving expired slide: ${slide.filename}`);
+
+                // duplicates it and archives it if its expired 
+                const archivedSlide = { ...slide };
+                delete archivedSlide._id; // Let Mongo generate a new _id
+                
+                archivedSlide.archivedAt = now1;
+                archivedSlide.archiveReason = 'expired';
+
+                await db.collection('ArchivedSlides').insertOne(archivedSlide);
+
+                // removes slide
+                await db.collection('Slides').deleteOne({ fileId: slide.fileId });
+            }
+        }
+    
     try {
         const slides = await db.collection('Slides')
             .find({
