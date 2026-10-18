@@ -200,6 +200,9 @@
                                     <button onclick="declineSlide('${slide.fileId}')">Decline</button>
                                     <button onclick="deleteSlide('${slide.fileId}')">Archive</button>
                                     <button onclick="editExpiry('${slide.fileId}', '${rawExpiry}')">Edit Expiry</button>
+                                    <button onclick="editEventDate('${slide.fileId}', '${slide.eventDate ? new Date(slide.eventDate).toISOString().slice(0, 10) : ''}')">
+                                        Edit Event Date
+                                        </button>
                                  </li>`;
                     });
 
@@ -281,8 +284,12 @@
             const formData = new FormData();
             formData.append('file', file);
             formData.append('email', email);
-            formData.append('eventDate', eventDate);
-            formData.append('expiresAt', expiryDate);
+            if (eventDate) {
+                formData.append('eventDate', eventDate);
+            }
+            if (expiryDate) {
+                formData.append('expiresAt', expiryDate);
+            }
 
             try {
                 const res = await fetch('/upload', {

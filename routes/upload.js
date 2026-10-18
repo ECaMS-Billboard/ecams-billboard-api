@@ -138,7 +138,34 @@ router.post(
         parsedExpiry = new Date(Date.now() + 70 * 24 * 60 * 60 * 1000);
       }
 
-      const parsedEventDate = eventDate ? new Date(eventDate + 'T00:00:00') : null;
+      let parsedEventDate = null;
+
+if (eventDate) {
+  if (
+    typeof eventDate !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(eventDate)
+  ) {
+    return res.status(400).json({
+      error: 'Event date must use the YYYY-MM-DD format.'
+    });
+  }
+
+  const dateParts = eventDate.split('-').map(Number);
+
+  parsedEventDate = new Date(
+    Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2])
+  );
+
+  if (
+    parsedEventDate.getUTCFullYear() !== dateParts[0] ||
+    parsedEventDate.getUTCMonth() !== dateParts[1] - 1 ||
+    parsedEventDate.getUTCDate() !== dateParts[2]
+  ) {
+    return res.status(400).json({
+      error: 'Please provide a valid event date.'
+    });
+  }
+}
       const submittedAt = new Date();
 
       const sanitizedOriginal = sanitizeFilename(req.file.originalname || 'upload');
