@@ -1096,6 +1096,37 @@ app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
     }
 });
 
+//cannot be undone, use with caution 
+app.delete('/delete-slide-permanent/:id', isAuthenticated, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const fileId = new mongoose.Types.ObjectId(id);
+
+        const archivedSlide = await db.collection('ArchivedSlides').findOne({ fileId });
+
+        if (!archivedSlide) {
+            return res.status(404).json({ error: 'Archived slide not found' });
+        }
+
+    
+        if (gfsBucket) {
+            try {
+                await gfsBucket.delete(fileId);
+            } catch (gridfsErr) {
+                console.error('GridFS deletion failed (file may already be gone):', gridfsErr);
+            }
+        }
+
+        // Remove from DB
+        await db.collection('ArchivedSlides').deleteOne({ fileId });
+
+        res.json({ message: 'Slide permanently deleted' });
+    } catch (err) {
+        console.error('Failed to permanently delete slide:', err);
+        res.status(500).json({ error: 'Failed to permanently delete slide', details: err.message });
+    }
+});
+
 // This is for approving slides
 app.put('/approve-slide/:id', isAuthenticated, async (req, res) => {
     try {
