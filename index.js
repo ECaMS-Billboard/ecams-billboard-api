@@ -1259,6 +1259,11 @@ app.post('/reorder-slides', isAuthenticated, async (req, res) => {
    }
 });
 
+// I know this looks like it does nothing, but it is very important to keep the kiosk API not asleep. this should get called every 15 mins. 
+app.get('/ping', (req, res) => {
+    res.status(204).end();
+});
+
 
 
 // Custom 404 page
