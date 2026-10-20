@@ -1037,7 +1037,7 @@ app.get('/list-archived', isAuthenticated, async (req, res) => {
 });
 
 app.get('/list-approved-images', async (req, res) => {
-    try {
+    /*try {
 
         const allSlides = await db.collection('Slides').find().toArray();
         const now1 = new Date();
@@ -1064,7 +1064,7 @@ app.get('/list-approved-images', async (req, res) => {
         catch (err) {
         console.error('Failed to purge expired approved images:', err);
         res.status(500).json({ error: 'Failed to purge expired approved images' });
-    }
+    }*/
     
     try {
         const slides = await db.collection('Slides')
