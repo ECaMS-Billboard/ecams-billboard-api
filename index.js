@@ -1037,25 +1037,34 @@ app.get('/list-archived', isAuthenticated, async (req, res) => {
 });
 
 app.get('/list-approved-images', async (req, res) => {
-    for (const slide of allSlides) {
-            // if statement to grab slides that are expired
-            if (slide.expiresAt && new Date(slide.expiresAt) < now1 && !slide.archivedAt) {
-                
-                console.log(`Auto-archiving expired slide: ${slide.filename}`);
+    try {
 
-                // duplicates it and archives it if its expired 
-                const archivedSlide = { ...slide };
-                delete archivedSlide._id; // Let Mongo generate a new _id
-                
-                archivedSlide.archivedAt = now1;
-                archivedSlide.archiveReason = 'expired';
+        const allSlides = await db.collection('Slides').find().toArray();
+        const now1 = new Date();
+        for (const slide of allSlides) {
+                // if statement to grab slides that are expired
+                if (slide.expiresAt && new Date(slide.expiresAt) < now1 && !slide.archivedAt) {
+                    
+                    console.log(`Auto-archiving expired slide: ${slide.filename}`);
 
-                await db.collection('ArchivedSlides').insertOne(archivedSlide);
+                    // duplicates it and archives it if its expired 
+                    const archivedSlide = { ...slide };
+                    delete archivedSlide._id; // Let Mongo generate a new _id
+                    
+                    archivedSlide.archivedAt = now1;
+                    archivedSlide.archiveReason = 'expired';
 
-                // removes slide
-                await db.collection('Slides').deleteOne({ fileId: slide.fileId });
+                    await db.collection('ArchivedSlides').insertOne(archivedSlide);
+
+                    // removes slide
+                    await db.collection('Slides').deleteOne({ fileId: slide.fileId });
+                }
             }
         }
+        catch (err) {
+        console.error('Failed to purge expired approved images:', err);
+        res.status(500).json({ error: 'Failed to purge expired approved images' });
+    }
     
     try {
         const slides = await db.collection('Slides')
