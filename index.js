@@ -1037,7 +1037,7 @@ app.get('/list-archived', isAuthenticated, async (req, res) => {
 });
 
 app.get('/list-approved-images', async (req, res) => {
-    /*try {
+    try {
 
         const allSlides = await db.collection('Slides').find().toArray();
         const now1 = new Date();
@@ -1060,13 +1060,7 @@ app.get('/list-approved-images', async (req, res) => {
                     await db.collection('Slides').deleteOne({ fileId: slide.fileId });
                 }
             }
-        }
-        catch (err) {
-        console.error('Failed to purge expired approved images:', err);
-        res.status(500).json({ error: 'Failed to purge expired approved images' });
-    }*/
-    
-    try {
+
         const slides = await db.collection('Slides')
             .find({
                 approved: true,
@@ -1251,7 +1245,7 @@ app.put('/edit-expiry/:id', isAuthenticated, async (req, res) => {
             if (typeof expiresAt === 'number') {
                 parsedExpiry = new Date(expiresAt);
             } else if (/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
-                parsedExpiry = new Date(expiresAt + 'T23:59:59-08:00'); // adjust TZ
+                parsedExpiry = new Date(expiresAt + 'T23:59:59-08:00'); 
             } else {
                 return res.status(400).json({ error: 'Invalid date format' });
             }
