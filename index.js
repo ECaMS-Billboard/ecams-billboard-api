@@ -1038,7 +1038,7 @@ app.get('/list-archived', isAuthenticated, async (req, res) => {
 
 app.get('/list-approved-images', async (req, res) => {
     try {
-        /*
+        
         const allSlides = await db.collection('Slides').find().toArray();
         const now1 = new Date();
         for (const slide of allSlides) {
@@ -1060,7 +1060,7 @@ app.get('/list-approved-images', async (req, res) => {
                     await db.collection('Slides').deleteOne({ fileId: slide.fileId });
                 }
             }
-                */
+                
 
         const slides = await db.collection('Slides')
             .find({
