@@ -569,4 +569,5 @@ router.delete("/reset", async (req, res) => {
 });
 
 
-module.exports = router;
+// Export bracket routes
+export default router;
