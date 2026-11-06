@@ -251,7 +251,7 @@
                 });
         }
 
-        function restoreSlide(id) {
+       function restoreSlide(id) {
             if (!confirm('Restore this slide?')) {
                 return;
             }
@@ -260,9 +260,33 @@
                 method: 'POST',
                 credentials: 'include'
             })
-            .then(() => fetchArchivedSlides())
+            .then(() => {
+                editExpiry(id, '');
+                fetchArchivedSlides();
+            })
             .catch(err => console.error('Failed to restore slide:', err));
         }
+
+        function permanentlyDeleteSlide(id) {
+            fetch(`/delete-slide-permanent/${id}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            })
+            .then(async res => {
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body?.error || `Delete failed: ${res.status}`);
+                }
+                return res.json();
+            })
+            .then(() => {
+                fetchArchivedSlides();
+            })
+            .catch(err => {
+                console.error('Failed to permanently delete slide:', err);
+                alert('Failed to permanently delete slide.');
+            });
+}
 
         document.getElementById('add-slide-form').addEventListener('submit', async function (event) {
             event.preventDefault();
@@ -547,7 +571,7 @@
         }
 
         
-        window.permanentlyDeleteSlide = permanentlyDeleteSlide;
+        window.permanentlyDeleteSlide = permanentlyDeleteSlide; 
         window.approveSlide = approveSlide;
         window.declineSlide = declineSlide;
         window.deleteSlide = deleteSlide;

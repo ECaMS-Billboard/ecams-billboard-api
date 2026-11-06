@@ -758,6 +758,30 @@ app.get('/list-archived', isAuthenticated, async (req, res) => {
 
 app.get('/list-approved-images', async (req, res) => {
     try {
+        
+        const allSlides = await db.collection('Slides').find().toArray();
+        const now1 = new Date();
+        for (const slide of allSlides) {
+                // if statement to grab slides that are expired
+                if (slide.expiresAt && new Date(slide.expiresAt) < now1 && !slide.archivedAt) {
+                    
+                    console.log(`Auto-archiving expired slide: ${slide.filename}`);
+
+                    // duplicates it and archives it if its expired 
+                    const archivedSlide = { ...slide };
+                    delete archivedSlide._id; // Let Mongo generate a new _id
+                    
+                    archivedSlide.archivedAt = now1;
+                    archivedSlide.archiveReason = 'expired';
+
+                    await db.collection('ArchivedSlides').insertOne(archivedSlide);
+
+                    // removes slide
+                    await db.collection('Slides').deleteOne({ fileId: slide.fileId });
+                }
+            }
+                
+
         const slides = await db.collection('Slides')
             .find({
                 approved: true,
@@ -798,6 +822,10 @@ app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
         delete archivedSlide._id;
         delete archivedSlide.archivedAt;
         delete archivedSlide.archivedBy;
+        delete archivedSlide.archiveReason;
+        delete archivedSlide.declineReason;
+
+        archivedSlide.expiresAt = null;
 
         await db.collection('Slides').insertOne(archivedSlide);
 
@@ -813,6 +841,7 @@ app.post('/restore-slide/:id', isAuthenticated, async (req, res) => {
 });
 
 // Permanently delete an archived slide cannot be recovered via mongoDB, use with caution!  
+//cannot be undone, use with caution 
 app.delete('/delete-slide-permanent/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
@@ -823,6 +852,8 @@ app.delete('/delete-slide-permanent/:id', isAuthenticated, async (req, res) => {
         if (!archivedSlide) {
             return res.status(404).json({ error: 'Archived slide not found' });
         }
+
+    
         if (gfsBucket) {
             try {
                 await gfsBucket.delete(fileId);
@@ -832,6 +863,7 @@ app.delete('/delete-slide-permanent/:id', isAuthenticated, async (req, res) => {
         }
 
         // Remove from ArchivedSlides collection
+        // Remove from DB
         await db.collection('ArchivedSlides').deleteOne({ fileId });
 
         res.json({ message: 'Slide permanently deleted' });
@@ -937,7 +969,7 @@ app.put('/edit-expiry/:id', isAuthenticated, async (req, res) => {
             if (typeof expiresAt === 'number') {
                 parsedExpiry = new Date(expiresAt);
             } else if (/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
-                parsedExpiry = new Date(expiresAt + 'T23:59:59-08:00'); // adjust TZ
+                parsedExpiry = new Date(expiresAt + 'T23:59:59-08:00'); 
             } else {
                 return res.status(400).json({ error: 'Invalid date format' });
             }
@@ -1003,6 +1035,11 @@ app.post('/reorder-slides', isAuthenticated, async (req, res) => {
         console.error('Error in /reorder-slides:', error);
         res.status(500).json({ error: 'Internal server error', details: error.message });
    }
+});
+
+// I know this looks like it does nothing, but it is very important to keep the kiosk API not asleep. this should get called every 15 mins. 
+app.get('/ping', (req, res) => {
+    res.status(204).end();
 });
 
 
