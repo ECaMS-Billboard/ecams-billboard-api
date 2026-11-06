@@ -119,27 +119,53 @@ router.post(
         description = '',
         notes = '',
         email = '',
-        expiresAt =  Date.now() + 70 * 24 * 60 * 60 * 1000
+        eventDate = '',
+        expiresAt = Date.now() + 70 * 24 * 60 * 60 * 1000
       } = req.body;
 
-     let parsedExpiry;
+      let parsedExpiry;
 
       if (typeof expiresAt === 'number') {
-          parsedExpiry = new Date(expiresAt);
+        parsedExpiry = new Date(expiresAt);
       } else if (expiresAt && /^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
-          parsedExpiry = new Date(expiresAt + 'T23:59:59-08:00'); 
+        parsedExpiry = new Date(expiresAt + 'T23:59:59-08:00');
       } else {
-          parsedExpiry = new Date(Date.now() + 70 * 24 * 60 * 60 * 1000);
+        parsedExpiry = new Date(Date.now() + 70 * 24 * 60 * 60 * 1000);
       }
 
-      // someone can fix this mess if they want at some point. I think this should work. This is needed because the API slide submission and user slide submission are a bit different 
+      // someone can fix this mess if they want at some point. I think this should work. This is needed because the API slide submission and user slide submission are a bit different
       if (!parsedExpiry || isNaN(parsedExpiry.getTime())) {
-          parsedExpiry = new Date(Date.now() + 70 * 24 * 60 * 60 * 1000);
+        parsedExpiry = new Date(Date.now() + 70 * 24 * 60 * 60 * 1000);
       }
 
-          
+      let parsedEventDate = null;
 
+if (eventDate) {
+  if (
+    typeof eventDate !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(eventDate)
+  ) {
+    return res.status(400).json({
+      error: 'Event date must use the YYYY-MM-DD format.'
+    });
+  }
 
+  const dateParts = eventDate.split('-').map(Number);
+
+  parsedEventDate = new Date(
+    Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2])
+  );
+
+  if (
+    parsedEventDate.getUTCFullYear() !== dateParts[0] ||
+    parsedEventDate.getUTCMonth() !== dateParts[1] - 1 ||
+    parsedEventDate.getUTCDate() !== dateParts[2]
+  ) {
+    return res.status(400).json({
+      error: 'Please provide a valid event date.'
+    });
+  }
+}
       const submittedAt = new Date();
 
       const sanitizedOriginal = sanitizeFilename(req.file.originalname || 'upload');
@@ -171,12 +197,13 @@ router.post(
             contentType: file.contentType,
             length: file.length,
             uploadDate: file.uploadDate,
-            submittedAt: submittedAt,
+            submittedAt,
             fileId: file._id,
-            description: description,
+            description,
             department: 'N/A',
-            notes: notes,
-            email: email,
+            notes,
+            email,
+            eventDate: parsedEventDate,
             approved: false,
             approvedBy: '',
             displayOrder: 0,
@@ -188,10 +215,12 @@ router.post(
             message: 'Image uploaded successfully',
             metadata: {
               description,
+              notes,
               email,
+              eventDate: parsedEventDate,
               approved: false,
               approvedBy: '',
-              submittedAt: submittedAt
+              submittedAt
             }
           });
         } catch (e) {
