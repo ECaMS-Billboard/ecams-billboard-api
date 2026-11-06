@@ -1,217 +1,835 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Monthly Bracket</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <style>
+<title>Monthly Bracket Manager</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background: #111827;
+    color: white;
+    margin: 0;
+    padding: 25px;
+}
+
+.container {
+    max-width: 1000px;
+    margin: auto;
+}
+
+h1, h2 {
+    text-align: center;
+}
+
+h1 {
+    color: #ef4444;
+}
+
+.section {
+    background: #1f2937;
+    padding: 25px;
+    border-radius: 10px;
+    margin-bottom: 25px;
+}
+
+input, button {
+    padding: 10px;
+    border-radius: 5px;
+    border: none;
+}
+
+input {
+    background: #374151;
+    color: white;
+    width: 100%;
+    margin: 5px 0 12px;
+}
+
+button {
+    cursor: pointer;
+    background: #dc2626;
+    color: white;
+    margin: 5px;
+}
+
+button:hover {
+    background: #b91c1c;
+}
+
+.secondary {
+    background: #4b5563;
+}
+
+.success {
+    background: #15803d;
+}
+
+.danger {
+    background: #991b1b;
+}
+
+.contestant {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #374151;
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 5px;
+}
+
+.match {
+    background: #374151;
+    padding: 18px;
+    margin: 12px 0;
+    border-radius: 8px;
+}
+
+.match button {
+    width: 100%;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+}
+
+.status {
+    text-align: center;
+    margin: 15px;
+    color: #facc15;
+}
+
+.history {
+    background: #374151;
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 8px;
+}
+
+.hidden {
+    display: none;
+}
+
+label {
+    display: block;
+    margin-top: 10px;
+}
+
+@media(max-width: 600px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+
     body {
-      font-family: Arial, sans-serif;
-      background-color: #f8f9fa;
-      margin: 0;
-      padding: 0;
+        padding: 12px;
     }
-
-    .container {
-      text-align: center;
-      padding: 40px;
-    }
-
-    h1 {
-      color: #343a40;
-    }
-
-    .round {
-      margin: 30px 0;
-    }
-
-    .match {
-      background: #e9ecef;
-      margin: 10px auto;
-      padding: 15px;
-      border-radius: 8px;
-      width: 400px;
-    }
-
-    .winner {
-      font-weight: bold;
-      color: green;
-    }
-
-    button {
-      margin: 5px;
-      padding: 8px 12px;
-      border-radius: 5px;
-      border: none;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background-color: #0056b3;
-      color: white;
-    }
-
-    .top-buttons {
-      margin-bottom: 20px;
-    }
-
-    .danger {
-      background-color: #dc3545;
-      color: white;
-    }
-
-    .danger:hover {
-      background-color: #a71d2a;
-    }
-  </style>
+}
+</style>
 </head>
 
 <body>
-  <div class="container">
-    <h1>Monthly Bracket Manager</h1>
 
-    <div class="top-buttons">
-      <button onclick="loadBracket()">Refresh</button>
-      <button class="danger" onclick="resetBracket()">Reset Bracket</button>
-      <button onclick="advanceRound()">Advance Round</button>
+<div class="container">
+
+<h1>Monthly Bracket Manager</h1>
+
+<p id="status" class="status">Loading bracket...</p>
+
+
+<!-- CREATE BRACKET -->
+
+<div class="section">
+
+<h2>Create New Bracket</h2>
+
+<label>Bracket Topic</label>
+<input id="topic" placeholder="Example: Favorite Video Game">
+
+<div class="grid">
+
+    <div>
+        <label>Month</label>
+        <select id="month" style="width:100%;padding:10px">
+            <option value="1">January</option>
+            <option value="2">February</option>
+            <option value="3">March</option>
+            <option value="4">April</option>
+            <option value="5">May</option>
+            <option value="6">June</option>
+            <option value="7">July</option>
+            <option value="8">August</option>
+            <option value="9">September</option>
+            <option value="10">October</option>
+            <option value="11">November</option>
+            <option value="12">December</option>
+        </select>
     </div>
 
-    <div id="bracket"></div>
-  </div>
+    <div>
+        <label>Year</label>
+        <input type="number" id="year">
+    </div>
 
-  <script>
-    async function loadBracket() {
-      try {
-        const res = await fetch('/api/bracket', { credentials: 'include' });
-        const data = await res.json();
+</div>
 
-        renderBracket(data);
-      } catch (err) {
-        console.error('Failed to load bracket:', err);
-        document.getElementById('bracket').innerHTML = 'Failed to load bracket.';
-      }
+<label>Round Duration (Days)</label>
+<input type="number" id="duration" value="7" min="1">
+
+<label>Contestants</label>
+
+<div id="contestants"></div>
+
+<div class="grid">
+    <input id="newContestant" placeholder="Enter contestant name">
+
+    <button onclick="addContestant()">Add Contestant</button>
+</div>
+
+<label>
+    <input type="checkbox" id="newVoting" checked
+        style="width:auto">
+    Enable Voting
+</label>
+
+<button onclick="createBracket()" style="width:100%">
+    Create Bracket
+</button>
+
+</div>
+
+
+<!-- CURRENT BRACKET -->
+
+<div class="section">
+
+<h2>Current Tournament</h2>
+
+<div id="currentBracket">
+    No bracket found.
+</div>
+
+<div class="grid">
+
+    <button class="success" onclick="advanceRound()">
+        Advance Round
+    </button>
+
+    <button class="danger" onclick="resetBracket()">
+        Reset Bracket
+    </button>
+
+</div>
+
+<button class="secondary" onclick="loadBracket()">
+    Refresh Bracket
+</button>
+
+</div>
+
+
+<!-- EDIT SETTINGS -->
+
+<div class="section">
+
+<h2>Edit Bracket Settings</h2>
+
+<label>Topic</label>
+<input id="editTopic">
+
+<label>Round Duration (Days)</label>
+<input id="editDuration" type="number" min="1">
+
+<label>
+    <input type="checkbox" id="editVoting"
+        style="width:auto">
+    Voting Enabled
+</label>
+
+<button onclick="saveSettings()">
+    Save Settings
+</button>
+
+</div>
+
+
+<!-- ROUND HISTORY -->
+
+<div class="section">
+
+<h2>Previous Rounds</h2>
+
+<div id="roundHistory">
+    No previous rounds.
+</div>
+
+</div>
+
+
+<!-- PAST WINNERS -->
+
+<div class="section">
+
+<h2>Past Tournament Winners</h2>
+
+<button onclick="loadWinners()">
+    Refresh Winners
+</button>
+
+<div id="winners"></div>
+
+</div>
+
+</div>
+
+
+<script>
+
+/* =========================
+   API
+========================= */
+
+const API = "/api/bracket";
+
+let bracket = null;
+let contestantList = [];
+
+const statusElement = document.getElementById("status");
+
+function setStatus(message) {
+    statusElement.textContent = message;
+}
+
+function escapeHTML(value) {
+    return String(value).replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+    })[char]);
+}
+
+async function apiRequest(url, options = {}) {
+
+    const response = await fetch(API + url, {
+        credentials: "include",
+        ...options,
+        headers: {
+            "Content-Type": "application/json",
+            ...options.headers
+        }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.error || "Request failed");
     }
 
-    function renderBracket(data) {
-        const container = document.getElementById('bracket');
+    return data;
+}
 
-        if (!data.matchups || data.matchups.length === 0) {
-            container.innerHTML = 'No bracket data found.';
+
+/* =========================
+   CONTESTANTS
+========================= */
+
+function addContestant() {
+
+    const input = document.getElementById("newContestant");
+
+    const name = input.value.trim();
+
+    if (!name) return;
+
+    if (contestantList.some(
+        item => item.toLowerCase() === name.toLowerCase()
+    )) {
+        alert("Contestant already exists.");
+        return;
+    }
+
+    contestantList.push(name);
+
+    input.value = "";
+
+    renderContestants();
+}
+
+function removeContestant(index) {
+
+    contestantList.splice(index, 1);
+
+    renderContestants();
+}
+
+function renderContestants() {
+
+    const container = document.getElementById("contestants");
+
+    container.innerHTML = contestantList.map((name, index) => `
+        <div class="contestant">
+            <span>${escapeHTML(name)}</span>
+
+            <button class="danger"
+                onclick="removeContestant(${index})">
+                Remove
+            </button>
+        </div>
+    `).join("");
+}
+
+
+/* =========================
+   CREATE BRACKET
+========================= */
+
+async function createBracket() {
+
+    const topic = document.getElementById("topic").value.trim();
+
+    const month = Number(document.getElementById("month").value);
+
+    const year = Number(document.getElementById("year").value);
+
+    const duration = Number(document.getElementById("duration").value);
+
+    const votingEnabled = document.getElementById("newVoting").checked;
+
+    if (!topic) {
+        alert("Enter a bracket topic.");
+        return;
+    }
+
+    if (contestantList.length < 2) {
+        alert("Add at least two contestants.");
+        return;
+    }
+
+    if (!Number.isInteger(duration) || duration < 1) {
+        alert("Enter a valid round duration.");
+        return;
+    }
+
+    try {
+
+        const data = await apiRequest("", {
+            method: "POST",
+
+            body: JSON.stringify({
+                topic,
+                month,
+                year,
+                contestants: contestantList,
+                roundDurationDays: duration,
+                votingEnabled
+            })
+        });
+
+        bracket = data;
+
+        contestantList = [];
+
+        renderContestants();
+
+        await loadBracket();
+
+        alert("Bracket created successfully!");
+
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+
+/* =========================
+   LOAD BRACKET
+========================= */
+
+async function loadBracket() {
+
+    try {
+
+        setStatus("Loading bracket...");
+
+        bracket = await apiRequest("");
+
+        renderBracket();
+
+        renderHistory();
+
+        setStatus(bracket
+            ? "Bracket loaded successfully."
+            : "No active bracket."
+        );
+
+    } catch (err) {
+
+        console.error(err);
+
+        setStatus("Failed to load bracket.");
+
+    }
+}
+
+
+/* =========================
+   RENDER BRACKET
+========================= */
+
+function renderBracket() {
+
+    const container = document.getElementById("currentBracket");
+
+    if (!bracket) {
+
+        container.innerHTML = "No bracket found.";
+
+        return;
+    }
+
+    document.getElementById("editTopic").value = bracket.topic;
+
+    document.getElementById("editDuration").value =
+        bracket.roundDurationDays;
+
+    document.getElementById("editVoting").checked =
+        bracket.votingEnabled;
+
+    if (bracket.tournamentEnded) {
+
+        container.innerHTML = `
+            <h2>${escapeHTML(bracket.topic)}</h2>
+
+            <h2 style="color:#22c55e">
+                Winner: ${escapeHTML(bracket.tournamentWinner)}
+            </h2>
+        `;
+
+        return;
+    }
+
+    const matchups = bracket.matchups || [];
+
+    let html = `
+        <h2>${escapeHTML(bracket.topic)}</h2>
+
+        <p>Round ${bracket.currentRound + 1}</p>
+
+        <p>Voting: ${bracket.votingEnabled ? "Enabled" : "Disabled"}</p>
+
+        <p>Round ends: ${
+            bracket.roundEnd
+                ? new Date(bracket.roundEnd).toLocaleString()
+                : "Not set"
+        }</p>
+    `;
+
+    matchups.forEach((match, index) => {
+
+        const [a, b] = match.pair;
+
+        const aVotes = match.votes?.[a] || 0;
+
+        const bVotes = b ? (match.votes?.[b] || 0) : 0;
+
+        html += `
+            <div class="match">
+
+                <h3>Match ${index + 1}</h3>
+
+                <p>${escapeHTML(a)} — ${aVotes} votes</p>
+
+                ${
+                    b
+                    ? `<p>${escapeHTML(b)} — ${bVotes} votes</p>`
+                    : `<p>Bye — automatically advances</p>`
+                }
+
+                ${
+                    bracket.votingEnabled && b
+                    ? `
+                        <button onclick="vote(${index}, ${JSON.stringify(a).replace(/</g, '\\u003c')})">
+                            Vote ${escapeHTML(a)}
+                        </button>
+
+                        <button onclick="vote(${index}, ${JSON.stringify(b).replace(/</g, '\\u003c')})">
+                            Vote ${escapeHTML(b)}
+                        </button>
+                    `
+                    : ""
+                }
+
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+
+/* =========================
+   VOTING
+========================= */
+
+async function vote(matchupIndex, choice) {
+
+    try {
+
+        const data = await apiRequest("/vote", {
+            method: "PUT",
+
+            body: JSON.stringify({
+                matchupIndex,
+                choice
+            })
+        });
+
+        bracket = data;
+
+        renderBracket();
+
+    } catch (err) {
+
+        alert(err.message);
+
+    }
+}
+
+
+/* =========================
+   SAVE SETTINGS
+========================= */
+
+async function saveSettings() {
+
+    try {
+
+        const topic = document.getElementById("editTopic").value.trim();
+
+        const duration = Number(
+            document.getElementById("editDuration").value
+        );
+
+        const votingEnabled =
+            document.getElementById("editVoting").checked;
+
+        if (!topic || !Number.isInteger(duration) || duration < 1) {
+            alert("Enter valid settings.");
             return;
         }
 
-        let html = `<h2>${data.topic}</h2>`;
-        html += `<h3>Round ${data.currentRound + 1}</h3>`;
+        bracket = await apiRequest("", {
+            method: "PUT",
 
-        data.matchups.forEach((match, index) => {
-            const [team1, team2] = match.pair;
+            body: JSON.stringify({
+                topic,
+                roundDurationDays: duration,
+                votingEnabled
+            })
+        });
 
-            const votes1 = match.votes?.[team1] || 0;
-            const votes2 = match.votes?.[team2] || 0;
+        renderBracket();
+
+        alert("Settings saved!");
+
+    } catch (err) {
+
+        alert(err.message);
+
+    }
+}
+
+
+/* =========================
+   ADVANCE ROUND
+========================= */
+
+async function advanceRound() {
+
+    if (!confirm("Advance to the next round?")) return;
+
+    try {
+
+        bracket = await apiRequest("/advance", {
+            method: "POST"
+        });
+
+        renderBracket();
+
+        renderHistory();
+
+        alert(
+            bracket.tournamentEnded
+                ? "Tournament completed!"
+                : "Round advanced successfully!"
+        );
+
+    } catch (err) {
+
+        alert(err.message);
+
+    }
+}
+
+
+/* =========================
+   RESET BRACKET
+========================= */
+
+async function resetBracket() {
+
+    if (!confirm(
+        "Are you sure you want to reset the current bracket?"
+    )) return;
+
+    try {
+
+        await apiRequest("/reset", {
+            method: "DELETE"
+        });
+
+        bracket = null;
+
+        renderBracket();
+
+        renderHistory();
+
+        setStatus("Bracket reset.");
+
+    } catch (err) {
+
+        alert(err.message);
+
+    }
+}
+
+
+/* =========================
+   ROUND HISTORY
+========================= */
+
+function renderHistory() {
+
+    const container = document.getElementById("roundHistory");
+
+    if (!bracket || !bracket.roundHistory?.length) {
+
+        container.innerHTML = "No previous rounds.";
+
+        return;
+    }
+
+    container.innerHTML = bracket.roundHistory.map(round => {
+
+        let html = `
+            <div class="history">
+
+                <h3>${escapeHTML(round.name)}</h3>
+
+                <p>
+                    ${round.roundStart
+                        ? new Date(round.roundStart).toLocaleDateString()
+                        : ""}
+                    -
+                    ${round.roundEnd
+                        ? new Date(round.roundEnd).toLocaleDateString()
+                        : ""}
+                </p>
+        `;
+
+        round.matchups.forEach(match => {
+
+            const [a, b] = match.pair;
 
             html += `
-            <div class="match">
-                <p>${team1} (${votes1})</p>
-                <p>${team2} (${votes2})</p>
-
-                <button onclick="vote(${index}, '${team1}')">
-                Vote ${team1}
-                </button>
-
-                <button onclick="vote(${index}, '${team2}')">
-                Vote ${team2}
-                </button>
-            </div>
+                <p>
+                    ${escapeHTML(a)}
+                    (${match.votes?.[a] || 0})
+                    vs
+                    ${
+                        b
+                        ? `${escapeHTML(b)} (${match.votes?.[b] || 0})`
+                        : "BYE"
+                    }
+                </p>
             `;
         });
 
-        container.innerHTML = html;
-    }
+        return html + "</div>";
 
-    async function advanceWinner(matchId, winner) {
-      if (!confirm('Advance this winner?')) return;
+    }).join("");
+}
 
-      try {
-        const res = await fetch('/api/bracket/advance', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          credentials: 'include',
-          body: JSON.stringify({ matchId, winner })
-        });
 
-        if (!res.ok) throw new Error('Failed to advance');
+/* =========================
+   PAST WINNERS
+========================= */
 
-        loadBracket();
-      } catch (err) {
-        console.error(err);
-        alert('Failed to advance winner.');
-      }
-    }
+async function loadWinners() {
 
-    async function resetBracket() {
-        if (!confirm('Reset bracket?')) return;
+    try {
 
-        await fetch('/api/bracket/reset', {
-            method: 'DELETE'
-        });
+        const winners = await apiRequest("/winners");
 
-        loadBracket();
-    }
+        const container = document.getElementById("winners");
 
-    async function vote(matchupIndex, choice) {
-        try {
-            const res = await fetch('/api/bracket/vote', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            credentials: 'include',
-            body: JSON.stringify({ matchupIndex, choice })
-            });
+        if (!winners.length) {
 
-            const data = await res.json();
+            container.innerHTML = "No past winners.";
 
-            if (!res.ok) {
-            alert(data.error || 'Vote failed');
             return;
-            }
-
-            renderBracket(data);
-
-        } catch (err) {
-            console.error(err);
-            alert('Vote failed');
         }
+
+        container.innerHTML = winners.map(w => `
+            <div class="history">
+
+                <strong>${escapeHTML(w.topic)}</strong>
+
+                <p style="color:#22c55e">
+                    Winner: ${escapeHTML(w.winner)}
+                </p>
+
+                <small>
+                    ${new Date(w.completedAt).toLocaleDateString()}
+                </small>
+
+            </div>
+        `).join("");
+
+    } catch (err) {
+
+        alert(err.message);
+
     }
+}
 
-    async function advanceRound() {
-        if (!confirm("Advance to next round?")) return;
 
-        try {
-            const res = await fetch('/api/bracket/advance', {
-            method: 'POST'
-            });
+/* =========================
+   INITIALIZATION
+========================= */
 
-            const data = await res.json();
+const now = new Date();
 
-            if (!res.ok) {
-            alert(data.error || "Failed to advance");
-            return;
-            }
+document.getElementById("month").value = now.getMonth() + 1;
 
-            renderBracket(data);
+document.getElementById("year").value = now.getFullYear();
 
-        } catch (err) {
-            console.error(err);
-            alert("Failed to advance round");
-        }
-    }
+loadBracket();
 
-    // Initial load
-    loadBracket();
-  </script>
+loadWinners();
+
+</script>
+
 </body>
 </html>
