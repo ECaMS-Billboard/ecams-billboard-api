@@ -1,6 +1,6 @@
 
-const express = require("express");
-const mongoose = require("mongoose");
+import express from 'express';
+import mongoose from 'mongoose';
 
 const router = express.Router();
 
@@ -569,4 +569,5 @@ router.delete("/reset", async (req, res) => {
 });
 
 
-module.exports = router;
+// Export bracket routes
+export default router;
