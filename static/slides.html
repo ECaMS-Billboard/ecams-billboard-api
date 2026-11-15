@@ -98,7 +98,21 @@
             
             <button type="submit">Add Slide</button>
         </form>
-
+        <form id="screenshot-form">
+            <input
+                type="url"
+                id="screenshot-url"
+                value="https://mango-water-0e83db20f.7.azurestaticapps.net/calendar"
+                required
+            >
+            <input
+                type="email"
+                id="screenshot-email"
+                value="ecamsbb@gmail.com"
+                required
+            >
+            <button type="submit">Add Screenshot</button>
+        </form>
         <p id="upload-message"></p>
 
         <div id="slides-data"></div>
@@ -340,6 +354,53 @@
             } catch (err) {
                 console.error('Failed to upload slide:', err);
                 uploadMessage.innerText = 'Upload failed. See console for details.';
+            }
+        });
+
+         document.getElementById('screenshot-form').addEventListener('submit', async function (event) {
+            event.preventDefault();
+
+            if (!submissionsEnabled) {
+                alert('Uploads are currently disabled by an administrator.');
+                return;
+            }
+
+            const uploadMessage = document.getElementById('upload-message');
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const url = document.getElementById('screenshot-url').value.trim();
+            const email = document.getElementById('screenshot-email').value;
+
+            submitBtn.disabled = true;
+            uploadMessage.innerText = 'Taking screenshot... this can take up to 30 seconds.';
+
+            try {
+                const res = await fetch('/upload/screenshot', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, email }),
+                    credentials: 'include'
+                });
+
+                if (res.status === 503) {
+                    const body = await res.json().catch(() => ({}));
+                    alert(body?.error || 'Uploads are disabled.');
+                    await refreshUploadToggleStatus();
+                    return;
+                }
+
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body?.error || `Screenshot failed: ${res.status}`);
+                }
+
+                await fetchSlides();
+                this.reset();
+                uploadMessage.innerText = 'Screenshot submitted successfully.';
+            } catch (err) {
+                console.error('Failed to upload screenshot:', err);
+                uploadMessage.innerText = 'Screenshot failed: ' + err.message;
+            } finally {
+                submitBtn.disabled = !submissionsEnabled;
             }
         });
 

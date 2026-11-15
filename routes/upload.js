@@ -11,6 +11,7 @@ import express from 'express';
 import multer from 'multer';
 import { Readable } from 'stream';
 
+
 const router = express.Router();
 
 // Middleware to block uploads when disabled
@@ -239,5 +240,109 @@ if (eventDate) {
     }
   }
 );
+
+
+router.post('/screenshot', checkSubmissionsEnabled, express.json(), async (req, res) => {
+  const db = req.app.locals.db;
+  const gfsBucket = req.app.locals.gfsBucket;
+
+  if (!db || !gfsBucket) {
+    return res.status(500).json({ error: 'Database not ready. Please try again later.' });
+  }
+
+  if (!process.env.SNAPRENDER_API_KEY) {
+    console.error('SNAPRENDER_API_KEY is not set.');
+    return res.status(500).json({ error: 'Screenshot service is not configured.' });
+  }
+
+  const { url, description = '', notes = '', email = '' } = req.body || {};
+
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return res.status(400).json({ error: 'Please provide a valid URL.' });
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return res.status(400).json({ error: 'Only http(s) URLs are allowed.' });
+  }
+
+  try {
+    const apiUrl =
+      'https://app.snap-render.com/v1/screenshot?' +
+      new URLSearchParams({
+        url: parsed.href,
+        format: 'jpeg',
+        width: '1080',
+        height: '1080', 
+        quality: '85',
+        delay: '1000',
+        block_cookie_banners: 'true',
+        block_ads: 'true',
+      });
+
+    const response = await fetch(apiUrl, {
+      headers: { 'X-API-Key': process.env.SNAPRENDER_API_KEY },
+      signal: AbortSignal.timeout(45000),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(`SnapRender returned ${response.status} ${detail}`.trim());
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    if (buffer.length > 5 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Screenshot is larger than 5 MB.' });
+    }
+
+    const submittedAt = new Date();
+    const hostname = parsed.hostname.replace(/[^\w.\-]/g, '_');
+    const finalFilename = `screenshot-${hostname}-${Date.now()}.jpg`;
+
+    const uploadStream = gfsBucket.openUploadStream(finalFilename, {
+      contentType: 'image/jpeg',
+    });
+
+    await new Promise((resolve, reject) => {
+      Readable.from(buffer).pipe(uploadStream).on('finish', resolve).on('error', reject);
+    });
+
+    const file = await db.collection('slides.files').findOne({ _id: uploadStream.id });
+
+    if (!file) {
+      return res.status(500).json({ error: 'Image upload failed' });
+    }
+
+    await db.collection('Slides').insertOne({
+      filename: file.filename,
+      contentType: file.contentType,
+      length: file.length,
+      uploadDate: file.uploadDate,
+      submittedAt,
+      fileId: file._id,
+      description,
+      department: 'N/A',
+      notes,
+      email,
+      eventDate: null,
+      approved: true,
+      approvedBy: 'SUBMITTED VIA API SCREENSHOT',
+      displayOrder: 0,
+      expiresAt: new Date(Date.now() + 70 * 24 * 60 * 60 * 1000),
+    });
+
+    return res.status(201).json({
+      file,
+      message: 'Screenshot uploaded successfully',
+      metadata: { description, notes, email, approved: false, approvedBy: '', submittedAt },
+    });
+  } catch (err) {
+    console.error('Screenshot failed:', err);
+    return res.status(500).json({ error: 'Failed to capture screenshot.', details: err.message });
+  }
+});
+
 
 export default router;
