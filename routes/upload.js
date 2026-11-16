@@ -345,4 +345,102 @@ router.post('/screenshot', checkSubmissionsEnabled, express.json(), async (req, 
 });
 
 
+const AUTO_APPROVER = 'SUBMITTED VIA API SCREENSHOT';
+const AUTO_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+router.post('/screenshot/auto', async (req, res) => {
+  const db = req.app.locals.db;
+  const gfsBucket = req.app.locals.gfsBucket;
+
+  if (!db || !gfsBucket) {
+    return res.status(500).json({ error: 'Database not ready.' });
+  }
+  if (!process.env.SNAPRENDER_API_KEY) {
+    return res.status(500).json({ error: 'Screenshot service is not configured.' });
+  }
+
+  try {
+    // All calendar slides, newest first
+    const olds = await db
+      .collection('Slides')
+      .find({ approvedBy: AUTO_APPROVER })
+      .sort({ submittedAt: -1 })
+      .toArray();
+    const newest = olds[0];
+
+    if (newest?.submittedAt && Date.now() - new Date(newest.submittedAt).getTime() < AUTO_MAX_AGE_MS) {
+      return res.status(200).json({ message: 'Slide not older than 1 day.' });
+    }
+
+    // Take the screenshot
+    const apiUrl =
+      'https://app.snap-render.com/v1/screenshot?' +
+      new URLSearchParams({
+        url: DEFAULT_SCREENSHOT_URL,
+        format: 'jpeg',
+        width: '1080',
+        height: '1080', 
+        quality: '85',
+        delay: '3000', 
+      });
+
+    const response = await fetch(apiUrl, {
+      headers: { 'X-API-Key': process.env.SNAPRENDER_API_KEY },
+      signal: AbortSignal.timeout(45000),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(`SnapRender returned ${response.status} ${detail}`.trim());
+    }
+
+   const buffer = Buffer.from(await response.arrayBuffer());
+
+    // Save the new image
+    const uploadStream = gfsBucket.openUploadStream(`auto-screenshot-${Date.now()}.jpg`, {
+      contentType: 'image/jpeg',
+    });
+    await new Promise((resolve, reject) => {
+      Readable.from(buffer).pipe(uploadStream).on('finish', resolve).on('error', reject);
+    });
+    const file = await db.collection('slides.files').findOne({ _id: uploadStream.id });
+    if (!file) throw new Error('Image upload failed');
+
+    // Create the new slide first, so a failure never leaves you with nothing.
+    // It keeps the old slide's department and position.
+    await db.collection('Slides').insertOne({
+      filename: file.filename,
+      contentType: file.contentType,
+      length: file.length,
+      uploadDate: file.uploadDate,
+      submittedAt: new Date(),
+      fileId: file._id,
+      description: 'Auto-refreshing screenshot',
+      department: newest?.department || 'N/A',
+      notes: '',
+      email: '',
+      eventDate: null,
+      approved: true,
+      approvedBy: 'SUBMITTED VIA API SCREENSHOT',
+      displayOrder: newest?.displayOrder ?? 0,
+      expiresAt: new Date(Date.now() + 70 * 24 * 60 * 60 * 1000),
+    });
+
+    // Purge the old calendar slide(s) and their images
+    for (const old of olds) {
+      await db.collection('Slides').deleteOne({ _id: old._id });
+      await gfsBucket.delete(old.fileId).catch((e) =>
+        console.error('Could not delete old image:', e.message)
+      );
+    }
+
+    return res.status(newest ? 200 : 201).json({
+      message: newest ? 'Calendar slide replaced.' : 'Calendar slide created.',
+      fileId: file._id,
+    });
+  } catch (err) {
+    console.error('Auto screenshot failed:', err);
+    return res.status(500).json({ error: 'Failed to refresh screenshot.', details: err.message });
+  }
+});
+
 export default router;
