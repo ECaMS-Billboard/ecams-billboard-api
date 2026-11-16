@@ -376,7 +376,7 @@ router.post('/screenshot/auto', async (req, res) => {
     const apiUrl =
       'https://app.snap-render.com/v1/screenshot?' +
       new URLSearchParams({
-        url: DEFAULT_SCREENSHOT_URL,
+        url: 'https://mango-water-0e83db20f.7.azurestaticapps.net/calendar',
         format: 'jpeg',
         width: '1080',
         height: '1080', 
