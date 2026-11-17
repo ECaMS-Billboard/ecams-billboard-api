@@ -167,6 +167,13 @@ const AllowedEmail = db.model(
     'AllowedEmails'
 );
 
+app.get("/api/node-version", (req, res) => {
+    res.json({
+        version: process.version,
+        platform: process.platform
+    });
+});
+
 /* =========================
    SERVER
 ========================= */
